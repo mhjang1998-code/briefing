@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#f4f5f7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0f1113" media="(prefers-color-scheme: dark)">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-180.png">
+<meta name="apple-mobile-web-app-title" content="브리핑">
+<title>아침 브리핑</title>
+<style>
+:root{
+  --bg:#f4f5f7; --card:#fff; --ink:#15171a; --sub:#5d6470; --faint:#9aa1ab; --line:#e6e8ec;
+  --accent:#2f6fed; --accent-soft:#e8effd; --up:#d9363e; --down:#2f6fed; --warn:#c2410c; --warn-soft:#fdeee4;
+  --ok:#15803d; --chip:#eef0f3; --shadow:0 1px 2px rgba(16,24,40,.06);
+}
+@media (prefers-color-scheme: dark){:root{
+  --bg:#0f1113; --card:#1a1d21; --ink:#eceef1; --sub:#a4abb6; --faint:#6b7280; --line:#2a2e34;
+  --accent:#6b9bff; --accent-soft:#1d2a44; --up:#ff6b70; --down:#6b9bff; --warn:#fb923c; --warn-soft:#3a2416;
+  --ok:#4ade80; --chip:#262a30; --shadow:none;
+}}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--ink)}
+body{font:15px/1.6 -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sans KR",sans-serif;
+  padding:env(safe-area-inset-top) 0 calc(72px + env(safe-area-inset-bottom));word-break:keep-all;overflow-wrap:anywhere}
+header{position:sticky;top:0;z-index:5;background:var(--bg);padding:14px 16px 8px;display:flex;align-items:center;gap:8px}
+header h1{font-size:22px;margin:0;flex:1;letter-spacing:-.02em}
+.icon-btn{border:0;background:var(--card);color:var(--sub);border-radius:10px;width:36px;height:36px;font-size:17px;box-shadow:var(--shadow)}
+main{padding:0 16px;max-width:680px;margin:0 auto}
+.card{background:var(--card);border-radius:14px;padding:14px 16px;margin:0 0 12px;box-shadow:var(--shadow)}
+.card h2{font-size:13px;font-weight:700;color:var(--sub);margin:0 0 8px;letter-spacing:.02em;display:flex;align-items:center;gap:6px}
+.card h2 .count{background:var(--chip);border-radius:99px;padding:0 7px;font-size:11px;color:var(--sub)}
+.muted{color:var(--sub)} .faint{color:var(--faint);font-size:13px}
+ul.lines{list-style:none;margin:0;padding:0}
+ul.lines li{position:relative;padding-left:14px;margin:3px 0}
+ul.lines li::before{content:"";position:absolute;left:2px;top:.72em;width:5px;height:5px;border-radius:50%;background:var(--faint)}
+ul.lines li.plain{padding-left:0} ul.lines li.plain::before{display:none}
+ul.lines li.sub{padding-left:26px;color:var(--sub);font-size:14px} ul.lines li.sub::before{left:14px;background:none;content:"↳";width:auto;height:auto;top:0}
+ul.lines li.title{font-weight:700;padding-left:0;margin-top:10px} ul.lines li.title::before{display:none}
+b.k{font-weight:700}
+.ind{display:grid;grid-template-columns:1fr auto;gap:2px 10px;padding:8px 0;border-top:1px solid var(--line)}
+.ind:first-of-type{border-top:0;padding-top:0}
+.ind .name{font-weight:600} .ind .px{font-variant-numeric:tabular-nums;font-weight:700;text-align:right}
+.ind .chg{grid-column:2;text-align:right;font-size:13px;font-variant-numeric:tabular-nums}
+.ind .note{grid-column:1/-1;font-size:13px;color:var(--sub)}
+.up{color:var(--up)} .down{color:var(--down)}
+.hero{padding:4px 2px 10px} .hero .date{font-size:13px;color:var(--sub)} .hero .h{font-size:17px;font-weight:700}
+.row{display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-top:1px solid var(--line)}
+.row:first-of-type{border-top:0}
+.row .body{flex:1;min-width:0}
+.row .meta{font-size:12px;color:var(--faint)}
+.chk{appearance:none;width:22px;height:22px;border:2px solid var(--faint);border-radius:7px;margin:2px 0 0;flex:none;display:grid;place-content:center}
+.chk:checked{background:var(--accent);border-color:var(--accent)}
+.chk:checked::after{content:"";width:10px;height:6px;border:2px solid #fff;border-top:0;border-right:0;transform:rotate(-45deg) translate(1px,-1px)}
+.done .body{color:var(--faint);text-decoration:line-through}
+.badge{display:inline-block;font-size:11px;font-weight:700;border-radius:6px;padding:1px 6px;margin-right:6px;background:var(--chip);color:var(--sub);vertical-align:1px}
+.badge.today{background:var(--accent);color:#fff} .badge.soon{background:var(--accent-soft);color:var(--accent)}
+.badge.late{background:var(--warn-soft);color:var(--warn)}
+.chip{display:inline-block;font-size:12px;border-radius:99px;padding:1px 9px;background:var(--chip);color:var(--sub)}
+.chip.new{background:var(--accent-soft);color:var(--accent)}
+.chip.pin{background:var(--warn-soft);color:var(--warn)}
+.tools{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+.tbtn{border:0;background:var(--chip);color:var(--sub);border-radius:8px;padding:5px 10px;font-size:13px}
+.tbtn.on{background:var(--warn-soft);color:var(--warn)}
+.tbtn.danger{color:var(--up)}
+textarea,input,select{font:inherit;font-size:16px;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px;width:100%}
+textarea{min-height:92px;resize:vertical}
+textarea:focus,input:focus,select:focus{outline:2px solid var(--accent-soft);border-color:var(--accent)}
+.btn{border:0;background:var(--accent);color:#fff;font-weight:700;border-radius:10px;padding:10px 16px;font-size:15px}
+.btn.ghost{background:var(--chip);color:var(--ink)}
+.form-row{display:flex;gap:8px;margin-top:8px} .form-row>*{flex:1}
+.thread{margin-top:10px;border-left:3px solid var(--line);padding-left:10px}
+.cmt{margin:6px 0;font-size:14px} .cmt .who{font-size:11px;font-weight:700;color:var(--faint);margin-right:4px}
+.cmt.claude .who{color:var(--accent)}
+.memo-text{white-space:pre-wrap}
+nav{position:fixed;left:0;right:0;bottom:0;z-index:10;background:var(--card);border-top:1px solid var(--line);
+  display:flex;padding:6px 4px calc(6px + env(safe-area-inset-bottom))}
+nav button{flex:1;border:0;background:none;color:var(--faint);font-size:11px;display:flex;flex-direction:column;align-items:center;gap:1px;padding:4px 0}
+nav button .i{font-size:20px;line-height:1.2;filter:grayscale(1);opacity:.7}
+nav button.on{color:var(--accent);font-weight:700} nav button.on .i{filter:none;opacity:1}
+.fab{position:fixed;right:18px;bottom:calc(80px + env(safe-area-inset-bottom));z-index:11;width:54px;height:54px;border-radius:50%;
+  border:0;background:var(--accent);color:#fff;font-size:28px;box-shadow:0 6px 18px rgba(47,111,237,.35)}
+.sheet-bg{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:20;display:none;align-items:flex-end}
+.sheet-bg.show{display:flex}
+.sheet{background:var(--card);width:100%;max-width:680px;margin:0 auto;border-radius:18px 18px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom))}
+.sheet h3{margin:0 0 10px;font-size:17px}
+.cats{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}
+.cats button{border:1px solid var(--line);background:none;color:var(--sub);border-radius:99px;padding:4px 11px;font-size:13px}
+.cats button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.seg{display:flex;background:var(--chip);border-radius:10px;padding:3px;margin:0 0 12px}
+.seg button{flex:1;border:0;background:none;color:var(--sub);border-radius:8px;padding:6px;font-size:14px}
+.seg button.on{background:var(--card);color:var(--ink);font-weight:700;box-shadow:var(--shadow)}
+.toast{position:fixed;left:50%;top:calc(12px + env(safe-area-inset-top));transform:translateX(-50%);z-index:30;background:var(--ink);color:var(--bg);
+  border-radius:99px;padding:7px 16px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none}
+.toast.show{opacity:.92}
+.empty{text-align:center;color:var(--faint);padding:24px 0}
+.wl-item{border-top:1px solid var(--line);padding:10px 0} .wl-item:first-of-type{border-top:0}
+.wl-item .form-row{margin-top:6px}
+a{color:var(--accent)}
+.hidden{display:none!important}
+</style>
+</head>
+<body>
+<header><h1 id="title">오늘</h1><button class="icon-btn" id="refresh" aria-label="새로고침">↻</button></header>
+<main id="view"><div class="empty">불러오는 중…</div></main>
+
+<button class="fab" id="fab" aria-label="메모 쓰기">＋</button>
+<nav id="nav">
+  <button data-tab="today" class="on"><span class="i">☀️</span>오늘</button>
+  <button data-tab="plan"><span class="i">🗓️</span>일정·할 일</button>
+  <button data-tab="memo"><span class="i">📝</span>메모</button>
+  <button data-tab="history"><span class="i">📚</span>기록</button>
+  <button data-tab="watch"><span class="i">📈</span>지표</button>
+</nav>
+
+<div class="sheet-bg" id="sheetBg"><div class="sheet" id="sheet"></div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* 연결 정보: 처음 한 번 주소 뒤 #u=<앱스크립트 exec 주소>&k=<키> 로 열면 이 기기에 저장된다 */
+const CONN = (() => {
+  const store = (k, v) => { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } };
+  const h = new URLSearchParams(location.hash.slice(1));
+  if (h.get('u') && h.get('k')) { store('brief_api', h.get('u')); store('brief_key', h.get('k')); }
+  return { url: h.get('u') || store('brief_api'), key: h.get('k') || store('brief_key') };
+})();
+const KEY = CONN.key;
+const S = { data:null, tab:'today', briefDate:null, open:{}, planSeg:'schedule', memoFilter:'all' };
+const $ = s => document.querySelector(s);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const linkify = s => esc(s).replace(/https?:\/\/[^\s<]+/g, u => `<a href="${u}" target="_blank" rel="noopener">${u}</a>`);
+const DOW = ['일','월','화','수','목','금','토'];
+
+async function call(fn, ...args){
+  if (fn === 'uiLoad') { try { return await callOnce(fn, args); } catch (e) { await new Promise(r => setTimeout(r, 800)); } }
+  try { return await callOnce(fn, args); } catch (e) { toast(e && e.message ? e.message : '연결 오류'); throw e; }
+}
+async function callOnce(fn, args){
+  {
+    const r = await fetch(CONN.url, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ key: KEY, action: 'ui', fn, args }) });
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error || '오류가 났어요');
+    return d.data;
+  }
+}
+function toast(m){ const t=$('#toast'); t.textContent=m; t.classList.add('show'); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove('show'),1800); }
+async function act(fn, ...args){ toast('저장 중…'); const d = await call(fn, ...args); S.data = d; render(); toast('저장됨'); return d; }
+
+function parseDate(s){ const [y,m,d]=String(s).split('-').map(Number); return new Date(y, m-1, d); }
+function md(s){ const d=parseDate(s); return `${d.getMonth()+1}/${d.getDate()}(${DOW[d.getDay()]})`; }
+function dday(s){
+  const diff = Math.round((parseDate(s) - parseDate(S.data.today)) / 864e5);
+  if (diff === 0) return ['D-day','today'];
+  if (diff < 0) return [`${-diff}일 지남`,'late'];
+  return [`D-${diff}`, diff <= 3 ? 'soon' : ''];
+}
+function ago(iso){
+  if(!iso) return ''; const d=new Date(iso); if(isNaN(d)) return '';
+  const kst = new Date(d.getTime()+9*3600e3);
+  return `${kst.getUTCMonth()+1}/${kst.getUTCDate()} ${String(kst.getUTCHours()).padStart(2,'0')}:${String(kst.getUTCMinutes()).padStart(2,'0')}`;
+}
+
+/* ── 브리핑 섹션 렌더 ── */
+function renderLines(text){
+  const out = String(text||'').split('\n').filter(l => l.trim()).map(l => {
+    let t = l.trim();
+    if (t.startsWith('↳')) return `<li class="sub">${linkify(t.replace(/^↳\s*/,''))}</li>`;
+    if (t.startsWith('▸')) return `<li class="title">${linkify(t.replace(/^▸\s*/,''))}</li>`;
+    if (t.startsWith('•')) {
+      t = t.replace(/^•\s*/,'');
+      const m = t.match(/^([^:：]{1,14})[:：]\s*(.*)$/);
+      return `<li>${m && !/^https?$/.test(m[1]) ? `<b class="k">${esc(m[1])}:</b> ${linkify(m[2])}` : linkify(t)}</li>`;
+    }
+    return `<li class="plain">${linkify(t)}</li>`;
+  });
+  return `<ul class="lines">${out.join('')}</ul>`;
+}
+function renderIndicators(text){
+  const lines = String(text||'').split('\n').filter(l=>l.trim());
+  let html = '';
+  lines.forEach(l => {
+    const t = l.trim();
+    if (t.startsWith('↳')) { html += `<div class="ind"><div class="note">↳ ${esc(t.replace(/^↳\s*/,''))}</div></div>`; return; }
+    const m = t.match(/^•\s*(.+?)\s+([\d,.\-]+)\s+([▲▼―][\d.]+%)(?:\s+\(5일\s*([+\-]?[\d.]+%)\))?$/);
+    if (!m) { html += `<div class="ind"><div class="name">${esc(t.replace(/^•\s*/,''))}</div></div>`; return; }
+    const cls = m[3][0]==='▲'?'up':m[3][0]==='▼'?'down':'';
+    const c5 = m[4] ? (m[4][0]==='-'?'down':(parseFloat(m[4])>0?'up':'')) : '';
+    html += `<div class="ind"><div class="name">${esc(m[1])}</div><div class="px">${esc(m[2])}</div>
+      <div class="faint">${m[4]?`5일 <span class="${c5}">${esc(m[4])}</span>`:''}</div><div class="chg ${cls}">${esc(m[3])}</div></div>`;
+  });
+  // ↳ 코멘트는 바로 위 지표 아래에 붙도록 note 블록만 이어 붙인다
+  return html.replace(/<\/div><div class="ind"><div class="note">/g, '<div class="note">');
+}
+function commentThread(type, id, comments){
+  const k = type+':'+id, open = S.open[k];
+  const list = (comments||[]).map(c => `<div class="cmt ${c.by}"><span class="who">${c.by==='claude'?'Claude':'나'}</span>${linkify(c.text)} <span class="faint">${ago(c.createdAt)}</span></div>`).join('');
+  return open ? `<div class="thread">${list || '<div class="faint">아직 댓글이 없어요.</div>'}
+    <div class="form-row"><input id="cin-${esc(k)}" placeholder="댓글 (다음 아침 브리핑 때 답해요)"><button class="btn" style="flex:none" data-cmt="${esc(k)}">등록</button></div></div>` : '';
+}
+function briefCard(b){
+  if (!b) return `<div class="card empty">아직 브리핑이 없어요. 내일 아침에 첫 브리핑이 들어옵니다.</div>`;
+  let html = `<div class="hero"><div class="date">${md(b.date)} 브리핑</div><div class="h">${esc(String(b.header||'').replace(/^📋\s*/,''))}</div></div>`;
+  S.data.sections.forEach(([f,label]) => {
+    const v = b[f]; if (!v || !String(v).trim()) return;
+    html += `<section class="card"><h2>${esc(label)}</h2>${f==='sec_indicators'?renderIndicators(v):renderLines(v)}</section>`;
+  });
+  const nc = (b.comments||[]).length;
+  html += `<div class="tools" style="margin:-4px 0 14px">
+    <button class="tbtn ${b.pinned?'on':''}" data-pin="brief:${esc(b.date)}">${b.pinned?'📌 고정됨':'📌 고정'}</button>
+    <button class="tbtn" data-toggle="brief:${esc(b.date)}">💬 댓글 ${nc||''}</button></div>
+    ${commentThread('brief', b.date, b.comments)}`;
+  return html;
+}
+
+/* ── 탭별 화면 ── */
+function viewToday(){
+  const d=S.data, b=d.briefs[0];
+  const open = d.schedules.filter(s=>!s.done).slice(0,5);
+  const late = open.filter(s => s.date < d.today).length;
+  let top = '';
+  if (b && b.date !== d.today) top += `<div class="card faint">오늘(${md(d.today)}) 브리핑은 아직 없어요. 가장 최근 브리핑을 보여 드려요.</div>`;
+  if (open.length) top += `<section class="card"><h2>다가오는 일정 ${late?`<span class="count" style="color:var(--warn)">${late}건 지남</span>`:''}</h2>${open.map(schedRow).join('')}</section>`;
+  return top + briefCard(b);
+}
+function schedRow(s){
+  const [t,c] = dday(s.date);
+  return `<div class="row ${s.done?'done':''}"><input type="checkbox" class="chk" data-done="schedule:${esc(s.id)}" ${s.done?'checked':''}>
+    <div class="body"><div><span class="badge ${s.done?'':c}">${s.done?'완료':t}</span>${esc(s.title)}</div>
+    <div class="meta">${md(s.date)}${s.time?' '+esc(s.time):''}${s.note?' · '+esc(s.note):''}</div></div>
+    <button class="tbtn" data-edit-s="${esc(s.id)}">편집</button></div>`;
+}
+function todoRow(t){
+  return `<div class="row ${t.done?'done':''}"><input type="checkbox" class="chk" data-done="todo:${esc(t.id)}" ${t.done?'checked':''}>
+    <div class="body">${linkify(t.text)}<div class="meta">${t.source==='claude'?'브리핑에서 추가':'직접 추가'} · ${ago(t.createdAt)}</div></div>
+    <button class="tbtn danger" data-del="todo:${esc(t.id)}">삭제</button></div>`;
+}
+function viewPlan(){
+  const d=S.data, seg=S.planSeg;
+  let html = `<div class="seg"><button data-seg="schedule" class="${seg==='schedule'?'on':''}">일정</button><button data-seg="todo" class="${seg==='todo'?'on':''}">할 일</button></div>`;
+  if (seg==='schedule'){
+    const open=d.schedules.filter(s=>!s.done), done=d.schedules.filter(s=>s.done).slice(-15).reverse();
+    html += `<section class="card"><h2>새 일정</h2><input id="s-title" placeholder="무엇을">
+      <div class="form-row"><input id="s-date" type="date" value="${d.today}"><input id="s-time" type="time"></div>
+      <div class="form-row"><button class="btn" id="s-add">일정 추가</button></div></section>
+      <section class="card"><h2>예정 <span class="count">${open.length}</span></h2>${open.map(schedRow).join('')||'<div class="empty">예정된 일정이 없어요</div>'}</section>`;
+    if (done.length) html += `<section class="card"><h2>완료</h2>${done.map(schedRow).join('')}</section>`;
+  } else {
+    const open=d.todos.filter(t=>!t.done), done=d.todos.filter(t=>t.done).slice(0,15);
+    html += `<section class="card"><div class="form-row" style="margin:0"><input id="t-text" placeholder="할 일 추가"><button class="btn" style="flex:none" id="t-add">추가</button></div></section>
+      <section class="card"><h2>할 일 <span class="count">${open.length}</span></h2>${open.map(todoRow).join('')||'<div class="empty">할 일이 없어요</div>'}</section>`;
+    if (done.length) html += `<section class="card"><h2>완료</h2>${done.map(todoRow).join('')}</section>`;
+  }
+  return html;
+}
+function memoCard(m){
+  const k='memo:'+m.id, nc=(m.comments||[]).length;
+  return `<section class="card">
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:6px">
+      <span class="faint">${md(m.day)}</span>${m.category?`<span class="chip">${esc(m.category)}</span>`:''}
+      ${m.status==='new'?'<span class="chip new">다음 브리핑 대기</span>':''}${m.pinned?'<span class="chip pin">고정</span>':''}
+      ${m.hasNewComment?'<span class="chip new">새 댓글</span>':''}</div>
+    <div class="memo-text">${linkify(m.text)}</div>
+    <div class="tools"><button class="tbtn ${m.pinned?'on':''}" data-pin="${esc(k)}">📌</button>
+      <button class="tbtn" data-toggle="${esc(k)}">💬 ${nc||''}</button>
+      <button class="tbtn" data-edit-m="${esc(m.id)}">편집</button>
+      <button class="tbtn danger" data-del-m="${esc(m.id)}">삭제</button></div>
+    ${commentThread('memo', m.id, m.comments)}</section>`;
+}
+function viewMemo(){
+  const d=S.data, f=S.memoFilter;
+  const filters=[['all','전체'],['new','대기'],['pinned','고정'],...d.categories.map(c=>[c,c])];
+  let list=d.memos;
+  if(f==='new') list=list.filter(m=>m.status==='new'); else if(f==='pinned') list=list.filter(m=>m.pinned);
+  else if(f!=='all') list=list.filter(m=>m.category===f);
+  return `<div class="cats" style="margin-top:0">${filters.map(([v,l])=>`<button data-mf="${esc(v)}" class="${f===v?'on':''}">${esc(l)}</button>`).join('')}</div>
+    ${list.map(memoCard).join('') || '<div class="empty">메모가 없어요</div>'}`;
+}
+function viewHistory(){
+  const d=S.data;
+  if (S.briefDate){
+    const b=d.briefs.find(x=>x.date===S.briefDate);
+    return `<button class="tbtn" id="back" style="margin-bottom:10px">‹ 목록</button>${briefCard(b)}`;
+  }
+  return `<section class="card">${d.briefs.map(b=>`<div class="row" data-open-b="${esc(b.date)}" style="cursor:pointer">
+    <div class="body"><div>${md(b.date)} ${b.pinned?'<span class="chip pin">고정</span>':''} ${b.hasNewComment?'<span class="chip new">새 댓글</span>':''}</div>
+    <div class="meta">${esc(String(b.header||'').replace(/^📋\s*/,''))}</div></div><span class="faint">›</span></div>`).join('') || '<div class="empty">기록이 없어요</div>'}</section>`;
+}
+function viewWatch(){
+  const w=S.data.watchlist;
+  const items=(S.wlDraft || w.items).map((it,i,arr)=>`<div class="wl-item" data-i="${i}">
+    <div class="form-row" style="margin-top:0"><input class="wl-label" value="${esc(it.label)}" placeholder="이름"><input class="wl-symbol" value="${esc(it.symbol)}" placeholder="심볼 (예: 005930.KS)"></div>
+    <div class="form-row"><input class="wl-prompt" value="${esc(it.prompt||'')}" placeholder="이 지표만의 지시 (예: 1350 넘으면 알려줘)"></div>
+    <div class="tools"><button class="tbtn" data-wl-up="${i}" ${i===0?'disabled':''}>▲</button><button class="tbtn" data-wl-down="${i}" ${i===arr.length-1?'disabled':''}>▼</button>
+      <button class="tbtn danger" data-wl-del="${i}">삭제</button>${it.price!==''&&it.price!=null?`<span class="faint" style="margin-left:auto">최근 ${esc(it.price)} ${esc(it.d1)}</span>`:''}</div></div>`).join('');
+  return `<section class="card"><h2>관심 지표 <span class="count">${(S.wlDraft||w.items).length}</span></h2>${items||'<div class="empty">지표가 없어요</div>'}
+    <div class="form-row"><button class="btn ghost" id="wl-add">＋ 지표 추가</button></div></section>
+    <section class="card"><h2>전체 공통 지시</h2><textarea id="wl-prompt" placeholder="예: 5일 ±5% 넘게 움직인 지표만 이유 한 줄">${esc(S.wlPromptDraft!=null?S.wlPromptDraft:w.prompt)}</textarea>
+    <div class="faint" style="margin-top:6px">심볼은 야후 파이낸스 기준 (코스피 ^KS11, 삼성전자 005930.KS, 환율 KRW=X, 나스닥 ^IXIC). 순서가 브리핑 표시 순서예요.</div>
+    <div class="form-row"><button class="btn" id="wl-save">저장</button></div></section>`;
+}
+
+const TITLES={today:'오늘',plan:'일정·할 일',memo:'메모',history:'기록',watch:'지표'};
+function render(){
+  if(!S.data) return;
+  $('#title').textContent=TITLES[S.tab];
+  document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.tab===S.tab));
+  $('#fab').classList.toggle('hidden', S.tab==='watch');
+  const v={today:viewToday,plan:viewPlan,memo:viewMemo,history:viewHistory,watch:viewWatch}[S.tab]();
+  $('#view').innerHTML=v;
+}
+
+/* ── 바텀시트 (메모 작성/편집, 일정 편집) ── */
+function openSheet(html){ $('#sheet').innerHTML=html; $('#sheetBg').classList.add('show'); }
+function closeSheet(){ $('#sheetBg').classList.remove('show'); }
+function memoSheet(m){
+  const cat = m ? m.category : '';
+  openSheet(`<h3>${m?'메모 편집':'새 메모'}</h3>
+    <textarea id="m-text" placeholder="생각, 할 일, 일정, 조사 요청… 뭐든 적어 두면 다음 아침 브리핑에서 정리해요">${m?esc(m.text):''}</textarea>
+    <div class="cats" id="m-cats"><button data-cat="" class="${!cat?'on':''}">자동 분류</button>${S.data.categories.map(c=>`<button data-cat="${esc(c)}" class="${cat===c?'on':''}">${esc(c)}</button>`).join('')}</div>
+    <div class="form-row"><button class="btn ghost" id="m-cancel">취소</button><button class="btn" id="m-save" data-id="${m?esc(m.id):''}">저장</button></div>`);
+  setTimeout(()=>$('#m-text').focus(),50);
+}
+function schedSheet(s){
+  openSheet(`<h3>일정 편집</h3><input id="e-title" value="${esc(s.title)}">
+    <div class="form-row"><input id="e-date" type="date" value="${esc(s.date)}"><input id="e-time" type="time" value="${esc(s.time||'')}"></div>
+    <div class="form-row"><button class="btn ghost" id="e-del" data-id="${esc(s.id)}" style="color:var(--up)">삭제</button><button class="btn" id="e-save" data-id="${esc(s.id)}">저장</button></div>`);
+}
+
+function readWlDraft(){
+  return [...document.querySelectorAll('.wl-item')].map((el,i)=>{
+    const base=(S.wlDraft||S.data.watchlist.items)[i]||{};
+    return Object.assign({},base,{label:el.querySelector('.wl-label').value.trim(),symbol:el.querySelector('.wl-symbol').value.trim(),prompt:el.querySelector('.wl-prompt').value.trim()});
+  });
+}
+
+document.addEventListener('click', async e => {
+  const t=e.target.closest('button, [data-open-b], input.chk'); if(!t) return;
+  const ds=t.dataset;
+  if (t.closest('nav') && ds.tab){ S.tab=ds.tab; S.briefDate=null; window.scrollTo(0,0); render(); return; }
+  if (t.id==='refresh'){ toast('불러오는 중…'); S.data=await call('uiLoad'); S.wlDraft=null; S.wlPromptDraft=null; render(); toast('최신 상태'); return; }
+  if (t.id==='fab'){ memoSheet(null); return; }
+  if (t.id==='m-cancel'){ closeSheet(); return; }
+  if (ds.cat!==undefined && t.closest('#m-cats')){ t.parentNode.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b===t)); return; }
+  if (t.id==='m-save'){
+    const text=$('#m-text').value, cat=(document.querySelector('#m-cats .on')||{}).dataset.cat||'';
+    closeSheet(); if (ds.id) await act('uiEditMemo', ds.id, text, cat); else { await act('uiAddMemo', text, cat); }
+    return;
+  }
+  if (ds.pin){ const [ty,id]=ds.pin.split(/:(.+)/); await act('uiTogglePin', ty, id); return; }
+  if (ds.toggle){ S.open[ds.toggle]=!S.open[ds.toggle]; render(); return; }
+  if (ds.cmt){ const [ty,id]=ds.cmt.split(/:(.+)/); const v=document.getElementById('cin-'+ds.cmt).value; if(!v.trim()) return; await act('uiAddComment', ty, id, v); return; }
+  if (ds.done){ const [ty,id]=ds.done.split(/:(.+)/); await act('uiSetDone', ty, id, t.checked); return; }
+  if (ds.del){ const [ty,id]=ds.del.split(/:(.+)/); if(confirm('삭제할까요?')) await act('uiDelete', ty, id); return; }
+  if (ds.editM){ memoSheet(S.data.memos.find(m=>m.id===ds.editM)); return; }
+  if (ds.delM){ if(confirm('메모와 댓글을 삭제할까요?')) await act('uiDeleteMemo', ds.delM); return; }
+  if (ds.editS){ schedSheet(S.data.schedules.find(s=>s.id===ds.editS)); return; }
+  if (t.id==='e-save'){ const s={id:ds.id,title:$('#e-title').value.trim(),date:$('#e-date').value,time:$('#e-time').value}; closeSheet(); await act('uiSaveSchedule', s); return; }
+  if (t.id==='e-del'){ if(confirm('일정을 삭제할까요?')){ closeSheet(); await act('uiDelete','schedule',ds.id); } return; }
+  if (t.id==='s-add'){ const s={title:$('#s-title').value.trim(),date:$('#s-date').value,time:$('#s-time').value}; if(!s.title) return toast('제목을 적어 주세요'); await act('uiSaveSchedule', s); return; }
+  if (t.id==='t-add'){ const v=$('#t-text').value; if(!v.trim()) return; await act('uiAddTodo', v); return; }
+  if (ds.seg){ S.planSeg=ds.seg; render(); return; }
+  if (ds.mf!==undefined){ S.memoFilter=ds.mf; render(); return; }
+  if (ds.openB){ S.briefDate=ds.openB; window.scrollTo(0,0); render(); return; }
+  if (t.id==='back'){ S.briefDate=null; render(); return; }
+  if (t.id==='wl-add'){ S.wlDraft=readWlDraft(); S.wlPromptDraft=$('#wl-prompt').value; S.wlDraft.push({label:'',symbol:'',prompt:''}); render(); return; }
+  if (ds.wlDel!==undefined||ds.wlUp!==undefined||ds.wlDown!==undefined){
+    const arr=readWlDraft(); S.wlPromptDraft=$('#wl-prompt').value;
+    if(ds.wlDel!==undefined) arr.splice(+ds.wlDel,1);
+    else { const i=+(ds.wlUp!==undefined?ds.wlUp:ds.wlDown), j=ds.wlUp!==undefined?i-1:i+1; [arr[i],arr[j]]=[arr[j],arr[i]]; }
+    S.wlDraft=arr; render(); return;
+  }
+  if (t.id==='wl-save'){ const items=readWlDraft().filter(x=>x.symbol); const p=$('#wl-prompt').value; await act('uiSaveWatchlist', items, p); S.wlDraft=null; S.wlPromptDraft=null; render(); return; }
+});
+$('#sheetBg').addEventListener('click', e => { if (e.target.id==='sheetBg') closeSheet(); });
+document.addEventListener('keydown', e => { if (e.key==='Enter' && e.target.id && e.target.id.startsWith('cin-')) { const b=e.target.parentNode.querySelector('[data-cmt]'); b && b.click(); }});
+
+if (!CONN.url || !CONN.key) {
+  $('#view').innerHTML = `<section class="card"><h2>처음 연결</h2>
+    <div class="muted" style="margin-bottom:8px">설치 때 받은 앱 주소(…#u=…&k=…) 전체를 붙여 넣으세요. 이 기기에만 저장됩니다.</div>
+    <textarea id="conn-in" placeholder="https://…#u=…&k=…"></textarea>
+    <div class="form-row"><button class="btn" id="conn-save">연결</button></div></section>`;
+  $('#conn-save').onclick = () => {
+    const v = $('#conn-in').value.trim(), i = v.indexOf('#');
+    const h = new URLSearchParams(i >= 0 ? v.slice(i + 1) : v);
+    if (!h.get('u') || !h.get('k')) return toast('주소 형식을 확인해 주세요');
+    try { localStorage.setItem('brief_api', h.get('u')); localStorage.setItem('brief_key', h.get('k')); } catch (e) {}
+    location.hash = 'u=' + encodeURIComponent(h.get('u')) + '&k=' + h.get('k'); location.reload();
+  };
+} else {
+  call('uiLoad').then(d => { S.data=d; render(); });
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && S.data)
+    call('uiLoad').then(d => { S.data=d; render(); }).catch(()=>{}); });
+}
+</script>
+</body>
+</html>
