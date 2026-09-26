@@ -102,21 +102,36 @@ nav button.on{color:var(--accent);font-weight:700} nav button.on .i{filter:none;
 .wl-item .form-row{margin-top:6px}
 a{color:var(--accent)}
 .hidden{display:none!important}
+.chatbar{position:fixed;left:0;right:0;bottom:calc(58px + env(safe-area-inset-bottom));z-index:9;background:var(--card);border-top:1px solid var(--line);
+  display:flex;gap:8px;align-items:flex-end;padding:8px 12px}
+.chatbar textarea{min-height:40px;max-height:140px;border-radius:20px;padding:9px 14px;resize:none;line-height:1.4}
+.chatbar button{flex:none;width:40px;height:40px;border-radius:50%;border:0;background:var(--accent);color:#fff;font-size:20px;font-weight:700}
+body.chat{padding-bottom:calc(140px + env(safe-area-inset-bottom))}
+.bubble-row{display:flex;flex-direction:column;align-items:flex-end;margin:0 0 12px}
+.bubble{background:var(--accent);color:#fff;border-radius:18px 18px 4px 18px;padding:9px 14px;max-width:85%;white-space:pre-wrap}
+.bubble a{color:#fff;text-decoration:underline}
+.bmeta{font-size:11px;color:var(--faint);margin-top:3px}
+.linkbtn{border:0;background:none;color:var(--up);font-size:11px;padding:0 0 0 6px}
+.sw{position:relative;width:44px;height:26px;flex:none}
+.sw input{opacity:0;width:0;height:0;position:absolute}
+.sw span{position:absolute;inset:0;background:var(--line);border-radius:99px;transition:.2s}
+.sw span::after{content:"";position:absolute;left:3px;top:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.2s;box-shadow:0 1px 2px rgba(0,0,0,.2)}
+.sw input:checked+span{background:var(--accent)} .sw input:checked+span::after{transform:translateX(18px)}
+.btn:disabled{opacity:.45} select{appearance:auto}
 </style>
 </head>
 <body>
 <header><h1 id="title">오늘</h1><button class="icon-btn" id="refresh" aria-label="새로고침">↻</button></header>
 <main id="view"><div class="empty">불러오는 중…</div></main>
 
-<button class="fab" id="fab" aria-label="메모 쓰기">＋</button>
 <nav id="nav">
   <button data-tab="today" class="on"><span class="i">☀️</span>오늘</button>
-  <button data-tab="plan"><span class="i">🗓️</span>일정·할 일</button>
-  <button data-tab="memo"><span class="i">📝</span>메모</button>
+  <button data-tab="memo"><span class="i">💬</span>메모</button>
   <button data-tab="history"><span class="i">📚</span>기록</button>
   <button data-tab="watch"><span class="i">📈</span>지표</button>
 </nav>
 
+<div id="chatbar" class="chatbar hidden"><textarea id="chat-in" rows="1" placeholder="메모 입력…"></textarea><button id="chat-send" aria-label="보내기">↑</button></div>
 <div class="sheet-bg" id="sheetBg"><div class="sheet" id="sheet"></div></div>
 <div class="toast" id="toast"></div>
 
@@ -209,22 +224,15 @@ function briefCard(b){
     const v = b[f]; if (!v || !String(v).trim()) return;
     html += `<section class="card"><h2>${esc(label)}</h2>${f==='sec_indicators'?renderIndicators(v):renderLines(v)}</section>`;
   });
-  const nc = (b.comments||[]).length;
-  html += `<div class="tools" style="margin:-4px 0 14px">
-    <button class="tbtn ${b.pinned?'on':''}" data-pin="brief:${esc(b.date)}">${b.pinned?'📌 고정됨':'📌 고정'}</button>
-    <button class="tbtn" data-toggle="brief:${esc(b.date)}">💬 댓글 ${nc||''}</button></div>
-    ${commentThread('brief', b.date, b.comments)}`;
+  html += `<div class="faint" style="text-align:center;margin:4px 0 18px">메모·댓글은 메모장에서 남기면 다음 브리핑에 반영돼요</div>`;
   return html;
 }
 
 /* ── 탭별 화면 ── */
 function viewToday(){
   const d=S.data, b=d.briefs[0];
-  const open = d.schedules.filter(s=>!s.done).slice(0,5);
-  const late = open.filter(s => s.date < d.today).length;
   let top = '';
   if (b && b.date !== d.today) top += `<div class="card faint">오늘(${md(d.today)}) 브리핑은 아직 없어요. 가장 최근 브리핑을 보여 드려요.</div>`;
-  if (open.length) top += `<section class="card"><h2>다가오는 일정 ${late?`<span class="count" style="color:var(--warn)">${late}건 지남</span>`:''}</h2>${open.map(schedRow).join('')}</section>`;
   return top + briefCard(b);
 }
 function schedRow(s){
@@ -280,6 +288,17 @@ function viewMemo(){
   return `<div class="cats" style="margin-top:0">${filters.map(([v,l])=>`<button data-mf="${esc(v)}" class="${f===v?'on':''}">${esc(l)}</button>`).join('')}</div>
     ${list.map(memoCard).join('') || '<div class="empty">메모가 없어요</div>'}`;
 }
+function viewChat(){
+  const list = S.data.memos.slice().reverse();
+  const body = list.map(m => {
+    const sent = m.status !== 'new';
+    return `<div class="bubble-row"><div class="bubble">${linkify(m.text)}</div>
+      <div class="bmeta">${ago(m.createdAt)} · ${sent ? '✓ 메모장에 전달됨' : '⏳ 다음 아침 브리핑 때 메모장으로'}
+      ${sent ? '' : `<button class="linkbtn" data-del-m="${esc(m.id)}">삭제</button>`}</div></div>`;
+  }).join('');
+  return `<div class="card faint" style="font-size:13px">길에서 떠오른 걸 바로 적어 두세요. 다음 아침 루틴이 메모장으로 옮기고 브리핑에서 정리해요.
+    전체 메모 관리는 메모장 사이트에서 해요.</div>${body || '<div class="empty">아직 휴대폰에서 쓴 메모가 없어요</div>'}`;
+}
 function viewHistory(){
   const d=S.data;
   if (S.briefDate){
@@ -290,28 +309,79 @@ function viewHistory(){
     <div class="body"><div>${md(b.date)} ${b.pinned?'<span class="chip pin">고정</span>':''} ${b.hasNewComment?'<span class="chip new">새 댓글</span>':''}</div>
     <div class="meta">${esc(String(b.header||'').replace(/^📋\s*/,''))}</div></div><span class="faint">›</span></div>`).join('') || '<div class="empty">기록이 없어요</div>'}</section>`;
 }
-function viewWatch(){
-  const w=S.data.watchlist;
-  const items=(S.wlDraft || w.items).map((it,i,arr)=>`<div class="wl-item" data-i="${i}">
-    <div class="form-row" style="margin-top:0"><input class="wl-label" value="${esc(it.label)}" placeholder="이름"><input class="wl-symbol" value="${esc(it.symbol)}" placeholder="심볼 (예: 005930.KS)"></div>
-    <div class="form-row"><input class="wl-prompt" value="${esc(it.prompt||'')}" placeholder="이 지표만의 지시 (예: 1350 넘으면 알려줘)"></div>
-    <div class="tools"><button class="tbtn" data-wl-up="${i}" ${i===0?'disabled':''}>▲</button><button class="tbtn" data-wl-down="${i}" ${i===arr.length-1?'disabled':''}>▼</button>
-      <button class="tbtn danger" data-wl-del="${i}">삭제</button>${it.price!==''&&it.price!=null?`<span class="faint" style="margin-left:auto">최근 ${esc(it.price)} ${esc(it.d1)}</span>`:''}</div></div>`).join('');
-  return `<section class="card"><h2>관심 지표 <span class="count">${(S.wlDraft||w.items).length}</span></h2>${items||'<div class="empty">지표가 없어요</div>'}
-    <div class="form-row"><button class="btn ghost" id="wl-add">＋ 지표 추가</button></div></section>
-    <section class="card"><h2>전체 공통 지시</h2><textarea id="wl-prompt" placeholder="예: 5일 ±5% 넘게 움직인 지표만 이유 한 줄">${esc(S.wlPromptDraft!=null?S.wlPromptDraft:w.prompt)}</textarea>
-    <div class="faint" style="margin-top:6px">심볼은 야후 파이낸스 기준 (코스피 ^KS11, 삼성전자 005930.KS, 환율 KRW=X, 나스닥 ^IXIC). 순서가 브리핑 표시 순서예요.</div>
-    <div class="form-row"><button class="btn" id="wl-save">저장</button></div></section>`;
+const PRESETS = {
+  '환율': [['원/달러','KRW=X'],['엔/원(1엔당)','JPYKRW=X'],['유로/원','EURKRW=X'],['달러인덱스','DX-Y.NYB']],
+  '국내 지수': [['코스피','^KS11'],['코스닥','^KQ11'],['코스피200','^KS200']],
+  '미국 지수': [['S&P500','^GSPC'],['나스닥','^IXIC'],['다우','^DJI'],['필라델피아 반도체','^SOX'],['VIX 공포지수','^VIX']],
+  '금리·원자재·코인': [['미국 10년물 금리','^TNX'],['WTI 유가','CL=F'],['금','GC=F'],['구리','HG=F'],['비트코인','BTC-USD']],
+  '반도체': [['삼성전자','005930.KS'],['SK하이닉스','000660.KS'],['한미반도체','042700.KS'],['엔비디아','NVDA'],['TSMC','TSM'],['마이크론','MU']],
+  '전력·인프라': [['HD현대일렉트릭','267260.KS'],['LS ELECTRIC','010120.KS'],['효성중공업','298040.KS'],['HD현대건설기계','267270.KS']],
+  '금융': [['한국금융지주','071050.KS'],['KB금융','105560.KS'],['삼성증권','016360.KS']],
+};
+function wlItems(){ if(!S.wl) S.wl = S.data.watchlist.items.map(x=>Object.assign({},x)); return S.wl; }
+function fmtNum(v){ if(v==null||isNaN(v)) return '-'; const a=Math.abs(v); return v.toLocaleString('ko-KR',{maximumFractionDigits:a>=1000?0:a>=100?1:2}); }
+function pct(v){ if(v==null||isNaN(v)) return ''; const c=v>0?'up':v<0?'down':''; return `<span class="${c}">${v>0?'▲':v<0?'▼':'―'}${Math.abs(v).toFixed(2)}%</span>`; }
+async function loadQuotes(){
+  const syms = wlItems().map(x=>x.symbol).concat((S.found||[]).map(x=>x.symbol));
+  if(!syms.length) return;
+  S.quotesLoaded = true;
+  try { const q = await call('uiQuotes', syms); S.quotes = Object.assign(S.quotes||{}, q); if(S.tab==='watch') render(); } catch(e){}
 }
+function quoteCell(sym){
+  const q=(S.quotes||{})[sym];
+  if(q===undefined) return '<span class="faint">…</span>';
+  if(!q) return '<span class="faint">조회 실패</span>';
+  return `<b style="font-variant-numeric:tabular-nums">${fmtNum(q.price)}</b> ${pct(q.d1)}<div class="faint">5일 ${q.d5==null?'-':(q.d5>0?'+':'')+q.d5.toFixed(1)+'%'}</div>`;
+}
+function viewWatch(){
+  const items = wlItems(), have = new Set(items.map(x=>x.symbol));
+  const on = items.filter(x=>x.enabled!==false).length;
+  const rows = items.map((it,i)=>`<div class="row wl-row" style="align-items:center">
+      <label class="sw"><input type="checkbox" data-wl-on="${i}" ${it.enabled!==false?'checked':''}><span></span></label>
+      <div class="body"><div style="font-weight:600;${it.enabled===false?'color:var(--faint)':''}">${esc(it.label)}</div>
+        <div class="meta">${esc(it.symbol)}${it.prompt?' · 지시: '+esc(it.prompt):''}</div></div>
+      <div style="text-align:right;min-width:92px">${quoteCell(it.symbol)}</div>
+      <div style="display:flex;flex-direction:column;gap:2px">
+        <button class="tbtn" data-wl-up="${i}" ${i===0?'disabled':''} style="padding:2px 8px">▲</button>
+        <button class="tbtn" data-wl-down="${i}" ${i===items.length-1?'disabled':''} style="padding:2px 8px">▼</button></div>
+      <button class="tbtn" data-wl-more="${i}" style="padding:4px 8px">⋯</button></div>
+      ${S.wlOpen===i?`<div class="card" style="background:var(--bg);margin:0 0 8px">
+        <div class="faint" style="margin-bottom:4px">이 지표만의 지시 (예: 1350 넘으면 알려줘)</div>
+        <input data-wl-prompt="${i}" value="${esc(it.prompt||'')}" placeholder="비워 두면 숫자만 보여줘요">
+        <div class="form-row"><button class="btn ghost" data-wl-del="${i}" style="color:var(--up)">목록에서 삭제</button><button class="btn" data-wl-close>닫기</button></div></div>`:''}`).join('');
+  const cat = S.cat || Object.keys(PRESETS)[0];
+  const presetChips = PRESETS[cat].map(([l,sym])=>`<button class="tbtn ${have.has(sym)?'on':''}" data-add="${esc(sym)}" data-label="${esc(l)}">${have.has(sym)?'✓ ':'+ '}${esc(l)}</button>`).join('');
+  const found = (S.found||[]).map(f=>`<div class="row" style="align-items:center"><div class="body"><div style="font-weight:600">${esc(f.label)}</div><div class="meta">${esc(f.market)} · ${esc(f.symbol)}</div></div>
+      <div style="text-align:right;min-width:92px">${quoteCell(f.symbol)}</div>
+      <button class="tbtn ${have.has(f.symbol)?'on':''}" data-add="${esc(f.symbol)}" data-label="${esc(f.label)}">${have.has(f.symbol)?'✓ 추가됨':'+ 추가'}</button></div>`).join('');
+  return `<section class="card"><h2>내 지표 <span class="count">브리핑 포함 ${on} / ${items.length}</span>
+      <button class="tbtn" id="wl-refresh" style="margin-left:auto">↻ 시세</button></h2>
+    <div class="faint" style="margin-bottom:4px">스위치를 끄면 목록엔 남고 브리핑에서만 빠져요. 순서가 브리핑 표시 순서예요.</div>
+    ${rows || '<div class="empty">지표가 없어요. 아래에서 추가하세요</div>'}</section>
+    <section class="card"><h2>종목 검색해서 추가</h2>
+      <div class="form-row" style="margin:0"><input id="wl-q" placeholder="예: 한미반도체, 엔비디아, 에코프로" value="${esc(S.q||'')}"><button class="btn" style="flex:none" id="wl-search">검색</button></div>
+      ${S.searching?'<div class="faint" style="margin-top:8px">검색 중…</div>':found}</section>
+    <section class="card"><h2>빠른 추가</h2>
+      <select id="wl-cat">${Object.keys(PRESETS).map(c=>`<option ${c===cat?'selected':''}>${esc(c)}</option>`).join('')}</select>
+      <div class="tools" style="margin-top:10px">${presetChips}</div></section>
+    <section class="card"><h2>전체 공통 지시 <span class="faint" style="font-weight:400">(선택)</span></h2>
+      <textarea id="wl-prompt" style="min-height:64px" placeholder="예: 5일 ±5% 넘게 움직인 지표만 이유 한 줄">${esc(S.wlPromptDraft!=null?S.wlPromptDraft:S.data.watchlist.prompt)}</textarea></section>
+    <div style="position:sticky;bottom:calc(76px + env(safe-area-inset-bottom));z-index:4">
+      <button class="btn" id="wl-save" style="width:100%;box-shadow:0 6px 18px rgba(47,111,237,.3)" ${S.wlDirty?'':'disabled'}>${S.wlDirty?'변경 내용 저장':'저장됨'}</button></div>`;
+}
+function wlChanged(){ S.wlDirty=true; render(); }
 
-const TITLES={today:'오늘',plan:'일정·할 일',memo:'메모',history:'기록',watch:'지표'};
+const TITLES={today:'오늘',memo:'메모',history:'기록',watch:'지표'};
 function render(){
   if(!S.data) return;
   $('#title').textContent=TITLES[S.tab];
   document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.tab===S.tab));
-  $('#fab').classList.toggle('hidden', S.tab==='watch');
-  const v={today:viewToday,plan:viewPlan,memo:viewMemo,history:viewHistory,watch:viewWatch}[S.tab]();
+    const v={today:viewToday,memo:viewChat,history:viewHistory,watch:viewWatch}[S.tab]();
   $('#view').innerHTML=v;
+  $('#chatbar').classList.toggle('hidden', S.tab!=='memo');
+  document.body.classList.toggle('chat', S.tab==='memo');
+  if (S.tab==='memo' && S.scrollChat!==false) { window.scrollTo(0, document.body.scrollHeight); }
+  if (S.tab==='watch' && !S.quotesLoaded) loadQuotes();
 }
 
 /* ── 바텀시트 (메모 작성/편집, 일정 편집) ── */
@@ -342,7 +412,7 @@ document.addEventListener('click', async e => {
   const t=e.target.closest('button, [data-open-b], input.chk'); if(!t) return;
   const ds=t.dataset;
   if (t.closest('nav') && ds.tab){ S.tab=ds.tab; S.briefDate=null; window.scrollTo(0,0); render(); return; }
-  if (t.id==='refresh'){ toast('불러오는 중…'); S.data=await call('uiLoad'); S.wlDraft=null; S.wlPromptDraft=null; render(); toast('최신 상태'); return; }
+  if (t.id==='refresh'){ toast('불러오는 중…'); S.data=await call('uiLoad'); S.wl=null; S.wlDirty=false; S.wlPromptDraft=null; S.quotesLoaded=false; render(); toast('최신 상태'); return; }
   if (t.id==='fab'){ memoSheet(null); return; }
   if (t.id==='m-cancel'){ closeSheet(); return; }
   if (ds.cat!==undefined && t.closest('#m-cats')){ t.parentNode.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b===t)); return; }
@@ -357,7 +427,7 @@ document.addEventListener('click', async e => {
   if (ds.done){ const [ty,id]=ds.done.split(/:(.+)/); await act('uiSetDone', ty, id, t.checked); return; }
   if (ds.del){ const [ty,id]=ds.del.split(/:(.+)/); if(confirm('삭제할까요?')) await act('uiDelete', ty, id); return; }
   if (ds.editM){ memoSheet(S.data.memos.find(m=>m.id===ds.editM)); return; }
-  if (ds.delM){ if(confirm('메모와 댓글을 삭제할까요?')) await act('uiDeleteMemo', ds.delM); return; }
+  if (ds.delM){ if(confirm('이 메모를 삭제할까요?')) await act('uiDeleteMemo', ds.delM); return; }
   if (ds.editS){ schedSheet(S.data.schedules.find(s=>s.id===ds.editS)); return; }
   if (t.id==='e-save'){ const s={id:ds.id,title:$('#e-title').value.trim(),date:$('#e-date').value,time:$('#e-time').value}; closeSheet(); await act('uiSaveSchedule', s); return; }
   if (t.id==='e-del'){ if(confirm('일정을 삭제할까요?')){ closeSheet(); await act('uiDelete','schedule',ds.id); } return; }
@@ -367,15 +437,41 @@ document.addEventListener('click', async e => {
   if (ds.mf!==undefined){ S.memoFilter=ds.mf; render(); return; }
   if (ds.openB){ S.briefDate=ds.openB; window.scrollTo(0,0); render(); return; }
   if (t.id==='back'){ S.briefDate=null; render(); return; }
-  if (t.id==='wl-add'){ S.wlDraft=readWlDraft(); S.wlPromptDraft=$('#wl-prompt').value; S.wlDraft.push({label:'',symbol:'',prompt:''}); render(); return; }
-  if (ds.wlDel!==undefined||ds.wlUp!==undefined||ds.wlDown!==undefined){
-    const arr=readWlDraft(); S.wlPromptDraft=$('#wl-prompt').value;
-    if(ds.wlDel!==undefined) arr.splice(+ds.wlDel,1);
-    else { const i=+(ds.wlUp!==undefined?ds.wlUp:ds.wlDown), j=ds.wlUp!==undefined?i-1:i+1; [arr[i],arr[j]]=[arr[j],arr[i]]; }
-    S.wlDraft=arr; render(); return;
-  }
-  if (t.id==='wl-save'){ const items=readWlDraft().filter(x=>x.symbol); const p=$('#wl-prompt').value; await act('uiSaveWatchlist', items, p); S.wlDraft=null; S.wlPromptDraft=null; render(); return; }
+  if (t.id==='wl-refresh'){ S.quotesLoaded=false; loadQuotes(); toast('시세 불러오는 중…'); return; }
+  if (t.id==='wl-search'){ const q=$('#wl-q').value.trim(); if(!q) return; S.q=q; S.searching=true; render();
+    try { S.found = await call('uiSearch', q); } finally { S.searching=false; render(); }
+    if (S.found && S.found.length){ const q2 = await call('uiQuotes', S.found.map(f=>f.symbol)).catch(()=>({})); S.quotes=Object.assign(S.quotes||{}, q2); render(); }
+    else toast('검색 결과가 없어요'); return; }
+  if (ds.add){ const items=wlItems(); if(items.some(x=>x.symbol===ds.add)) return toast('이미 있어요');
+    items.push({label:ds.label, symbol:ds.add, prompt:'', enabled:true}); wlChanged(); toast(ds.label+' 추가 (저장을 눌러 주세요)');
+    if(!(S.quotes||{})[ds.add]) call('uiQuotes',[ds.add]).then(q=>{S.quotes=Object.assign(S.quotes||{},q); render();}).catch(()=>{}); return; }
+  if (ds.wlUp!==undefined||ds.wlDown!==undefined){ const a=wlItems(), i=+(ds.wlUp!==undefined?ds.wlUp:ds.wlDown), j=ds.wlUp!==undefined?i-1:i+1; [a[i],a[j]]=[a[j],a[i]]; S.wlOpen=null; wlChanged(); return; }
+  if (ds.wlMore!==undefined){ S.wlOpen = S.wlOpen===+ds.wlMore ? null : +ds.wlMore; render(); return; }
+  if (ds.wlClose!==undefined){ S.wlOpen=null; render(); return; }
+  if (ds.wlDel!==undefined){ wlItems().splice(+ds.wlDel,1); S.wlOpen=null; wlChanged(); return; }
+  if (t.id==='wl-save'){ const p=$('#wl-prompt').value; const d=await act('uiSaveWatchlist', wlItems(), p); S.wl=null; S.wlDirty=false; S.wlPromptDraft=null; render(); return; }
 });
+document.addEventListener('change', e => {
+  const t=e.target, ds=t.dataset;
+  if (ds.wlOn!==undefined){ wlItems()[+ds.wlOn].enabled = t.checked; wlChanged(); }
+  if (t.id==='wl-cat'){ S.cat=t.value; render(); }
+});
+document.addEventListener('input', e => {
+  const t=e.target, ds=t.dataset;
+  if (ds.wlPrompt!==undefined){ wlItems()[+ds.wlPrompt].prompt = t.value; S.wlDirty=true; const b=$('#wl-save'); if(b){b.disabled=false;b.textContent='변경 내용 저장';} }
+  if (t.id==='wl-prompt'){ S.wlPromptDraft=t.value; S.wlDirty=true; const b=$('#wl-save'); if(b){b.disabled=false;b.textContent='변경 내용 저장';} }
+  if (t.id==='wl-q'){ S.q=t.value; }
+});
+async function sendChat(){
+  const el=$('#chat-in'), v=el.value.trim(); if(!v) return;
+  el.value=''; el.style.height='';
+  S.data.memos.unshift({id:'tmp',text:v,status:'new',createdAt:new Date().toISOString()}); render();
+  try { S.data = await call('uiAddMemo', v, ''); render(); toast('저장됨'); }
+  catch(e){ el.value=v; S.data.memos=S.data.memos.filter(m=>m.id!=='tmp'); render(); }
+}
+document.getElementById('chat-send').addEventListener('click', sendChat);
+document.getElementById('chat-in').addEventListener('input', e => { e.target.style.height='auto'; e.target.style.height=Math.min(e.target.scrollHeight,140)+'px'; });
+document.addEventListener('keydown', e => { if (e.key==='Enter' && e.target.id==='wl-q'){ e.preventDefault(); $('#wl-search').click(); }});
 $('#sheetBg').addEventListener('click', e => { if (e.target.id==='sheetBg') closeSheet(); });
 document.addEventListener('keydown', e => { if (e.key==='Enter' && e.target.id && e.target.id.startsWith('cin-')) { const b=e.target.parentNode.querySelector('[data-cmt]'); b && b.click(); }});
 
