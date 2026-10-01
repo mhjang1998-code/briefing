@@ -5,6 +5,7 @@
  *            ?api=pull&key=<키> → 매일 루틴이 읽는 JSON
  * - doPost : {key, action:"push"|"import", ...} → 매일 루틴이 쓰는 JSON
  * - 메모·브리핑 "확인" 표시: 확인시각(seenAt) 이후 Claude 댓글이 달리거나(브리핑은 재작성 포함) 하면 다시 미확인.
+ * - 항목: 브리핑을 주제별 카드로 쪼갠 것. [확인]하면 "오늘"에서 빠지고 "관리"의 카테고리(금융·부동산…)로 쌓인다.
  */
 const TZ = 'Asia/Seoul';
 
@@ -22,7 +23,10 @@ const SCHEMA = {
   memos: { sheet: '메모', key: 'id', bools: ['pinned'], cols: [
     ['id', 'id'], ['day', '날짜'], ['text', '내용'], ['status', '상태'], ['category', '카테고리'],
     ['pinned', '고정'], ['createdAt', '작성시각'], ['updatedAt', '수정시각'], ['sentAt', '처리시각'], ['source', '출처'],
-    ['seenAt', '확인시각']] },
+    ['seenAt', '확인시각'], ['domain', '관리']] },
+  items: { sheet: '항목', key: 'id', bools: ['pinned'], cols: [
+    ['id', 'id'], ['date', '날짜'], ['section', '섹션'], ['title', '제목'], ['body', '내용'], ['domain', '관리'],
+    ['createdAt', '작성시각'], ['seenAt', '확인시각'], ['pinned', '고정']] },
   comments: { sheet: '댓글', key: 'id', bools: ['seen'], cols: [
     ['id', 'id'], ['targetType', '대상'], ['targetId', '대상id'], ['by', '작성자'], ['text', '내용'],
     ['createdAt', '작성시각'], ['seen', '확인']] },
@@ -39,6 +43,7 @@ const SCHEMA = {
 };
 
 const CATEGORIES = ['일정', '할 일', '분석', '결정', '생각', '기타'];
+const DEFAULT_DOMAINS = ['금융', '부동산', '인사이트', '전공', '사업', '기타'];
 
 /* ───────────── 공통 유틸 ───────────── */
 
@@ -53,7 +58,7 @@ function apiKey_() {
 /** 설치 스크립트로 배포한 경우 첫 접속 때 시트 구성·이관을 자동으로 한다. */
 function ensureSetup_() {
   if (ss_().getSheetByName('설정') && PropertiesService.getScriptProperties().getProperty('API_KEY')) {
-    ensureColumns_('watchlist'); ensureColumns_('memos'); ensureColumns_('briefs'); return;
+    ensureSheet_('items'); ensureColumns_('watchlist'); ensureColumns_('memos'); ensureColumns_('briefs'); ensureColumns_('items'); return;
   }
   withLock_(() => {
     if (ss_().getSheetByName('설정') && PropertiesService.getScriptProperties().getProperty('API_KEY')) return;
@@ -73,6 +78,17 @@ function cellToValue_(v, field) {
     return v.toISOString();
   }
   return v;
+}
+
+/** 스키마에 새로 추가된 시트가 없으면 머리글만 넣어 만든다. */
+function ensureSheet_(name) {
+  const s = SCHEMA[name];
+  if (ss_().getSheetByName(s.sheet)) return;
+  const sh = ss_().insertSheet(s.sheet);
+  const labels = s.cols.map(c => c[1]);
+  sh.getRange(1, 1, 1, labels.length).setValues([labels]).setFontWeight('bold').setBackground('#eef2f7');
+  sh.setFrozenRows(1);
+  sh.getRange(2, 1, Math.max(sh.getMaxRows() - 1, 1), labels.length).setNumberFormat('@');
 }
 
 /** 스키마에 새로 추가된 열이 시트에 없으면 맨 끝에 붙인다. */
@@ -177,6 +193,11 @@ function withLock_(fn) {
   try { return fn(); } finally { lock.releaseLock(); }
 }
 
+function domains_() {
+  const v = getSetting_('관리카테고리');
+  const list = v ? v.split(',').map(x => x.trim()).filter(Boolean) : [];
+  return list.length ? list : DEFAULT_DOMAINS.slice();
+}
 function getSetting_(k) { const r = findBy_('settings', 'key', k); return r ? String(r.value) : ''; }
 function setSetting_(k, v) { upsert_('settings', { key: k, value: v }); }
 
@@ -358,6 +379,9 @@ function apiPull_() {
     todos: readAll_('todos').filter(t => !t.done).map(strip_),
     watchlist: { items: watchlist_().filter(w => w.enabled), prompt: getSetting_('지표공통프롬프트'),
       all: watchlist_(), updatedAt: getSetting_('지표수정시각') },
+    domains: domains_(),
+    itemsWithNewComments: readAll_('items').map(i => attach_('item', i, idx)).filter(i => i.hasNewComment),
+    memosNoDomain: memos.filter(m => !m.domain).slice(0, 50).map(m => ({ id: m.id, day: m.day, text: m.text })),
   };
 }
 
@@ -436,19 +460,33 @@ function apiPush_(body) {
   }
 
   if (body.memoUpdates && body.memoUpdates.length) {
-    const memos = readAll_('memos');
+    const memos = readAll_('memos'), doms = domains_();
     body.memoUpdates.forEach(u => {
       const m = memos.find(x => x.id === u.id);
       if (!m) return;
-      const patch = { status: u.status || 'sent', sentAt: now };
+      const patch = {};
+      if (u.status) { patch.status = u.status; patch.sentAt = now; }
       if (u.category && !m.category && CATEGORIES.indexOf(u.category) >= 0) patch.category = u.category;
-      patchRow_('memos', m._row, patch); counts.memos++;
+      if (u.domain && !m.domain && doms.indexOf(u.domain) >= 0) patch.domain = u.domain;
+      if (Object.keys(patch).length) { patchRow_('memos', m._row, patch); counts.memos++; }
     });
+  }
+
+  // 브리핑 항목: 같은 날짜로 다시 보내면 아직 확인·댓글 없는 항목만 새것으로 바꾼다
+  if (body.items && body.items.length && body.brief && body.brief.date) {
+    const date = body.brief.date, doms = domains_(), cmt = commentsIndex_();
+    const sh = sheetOf_('items');
+    readAll_('items').filter(i => i.date === date && !i.seenAt && !(cmt['item:' + i.id] || []).length)
+      .map(i => i._row).sort((a, b) => b - a).forEach(r => sh.deleteRow(r));
+    const add = body.items.filter(it => it && (it.title || it.body)).map(it => ({
+      id: newId_('i'), date, section: it.section || '', title: it.title || '', body: it.body || '',
+      domain: doms.indexOf(it.domain) >= 0 ? it.domain : '기타', createdAt: now, seenAt: '', pinned: false }));
+    append_('items', add); counts.items = add.length;
   }
 
   if (body.comments && body.comments.length) {
     const add = body.comments.filter(c => c.text && c.targetId)
-      .map(c => ({ id: newId_('c'), targetType: c.targetType === 'brief' ? 'brief' : 'memo',
+      .map(c => ({ id: newId_('c'), targetType: ['brief', 'item'].indexOf(c.targetType) >= 0 ? c.targetType : 'memo',
         targetId: c.targetId, by: 'claude', text: c.text, createdAt: now, seen: true }));
     append_('comments', add); counts.comments = add.length;
   }
@@ -486,7 +524,7 @@ function importData_(d) {
 /* ───────────── 앱 화면용 함수 (google.script.run 또는 외부 앱의 POST action:"ui") ───────────── */
 
 const UI_FUNCS = { uiLoad, uiAddMemo, uiEditMemo, uiDeleteMemo, uiTogglePin, uiAddComment, uiDeleteComment,
-  uiSetSeen, uiSaveSchedule, uiSetDone, uiDelete, uiAddTodo, uiSaveWatchlist, uiSearch, uiQuotes };
+  uiSetSeen, uiSetDomain, uiSaveDomains, uiSaveSchedule, uiSetDone, uiDelete, uiAddTodo, uiSaveWatchlist, uiSearch, uiQuotes };
 
 function uiDispatch_(body) {
   const fn = UI_FUNCS[body.fn];
@@ -506,22 +544,26 @@ function uiLoad(key) {
     .sort((a, b) => (String(a.date) + a.time).localeCompare(String(b.date) + b.time));
   const todos = readAll_('todos').map(strip_)
     .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
-  return { today: today_(), sections: SECTIONS, categories: CATEGORIES, briefs, memos, schedules, todos,
+  const items = readAll_('items').map(i => attach_('item', i, idx))
+    .sort((a, b) => String(b.date).localeCompare(String(a.date)) || String(a.createdAt).localeCompare(String(b.createdAt)))
+    .slice(0, 800);
+  return { today: today_(), sections: SECTIONS, categories: CATEGORIES, domains: domains_(), briefs, memos, items, schedules, todos,
     watchlist: { items: watchlist_(), prompt: getSetting_('지표공통프롬프트') } };
 }
 
-function uiAddMemo(key, text, category) {
+function uiAddMemo(key, text, category, domain) {
   checkKey_(key);
   text = String(text || '').trim();
   if (!text) throw new Error('내용이 비어 있습니다.');
   const now = nowIso_();
   // 직접 쓴 메모는 쓰는 순간 본 것으로 둔다. Claude 답글이 달리면 다시 미확인이 된다.
   withLock_(() => append_('memos', [{ id: newId_('m'), day: today_(), text, status: 'new',
-    category: CATEGORIES.indexOf(category) >= 0 ? category : '', pinned: false, createdAt: now, source: 'app', seenAt: now }]));
+    category: CATEGORIES.indexOf(category) >= 0 ? category : '', pinned: false, createdAt: now, source: 'app', seenAt: now,
+    domain: domains_().indexOf(domain) >= 0 ? domain : '' }]));
   return uiLoad(key);
 }
 
-function uiEditMemo(key, id, text, category, day) {
+function uiEditMemo(key, id, text, category, day, domain) {
   checkKey_(key);
   withLock_(() => {
     const m = findBy_('memos', 'id', id);
@@ -533,6 +575,7 @@ function uiEditMemo(key, id, text, category, day) {
     }
     if (category !== null && category !== undefined) patch.category = CATEGORIES.indexOf(category) >= 0 ? category : '';
     if (day && /^\d{4}-\d{2}-\d{2}$/.test(day)) patch.day = day;
+    if (domain !== null && domain !== undefined) patch.domain = domains_().indexOf(domain) >= 0 ? domain : '';
     patchRow_('memos', m._row, patch);
   });
   return uiLoad(key);
@@ -562,7 +605,7 @@ function uiAddComment(key, type, id, text) {
   checkKey_(key);
   text = String(text || '').trim();
   if (!text) throw new Error('댓글이 비어 있습니다.');
-  withLock_(() => append_('comments', [{ id: newId_('c'), targetType: type === 'brief' ? 'brief' : 'memo',
+  withLock_(() => append_('comments', [{ id: newId_('c'), targetType: ['brief', 'item'].indexOf(type) >= 0 ? type : 'memo',
     targetId: id, by: 'user', text, createdAt: nowIso_(), seen: false }]));
   return uiLoad(key);
 }
@@ -576,13 +619,34 @@ function uiDeleteComment(key, id) {
 /** 확인 표시: type = "memo" | "brief", ids = 메모 id 또는 브리핑 날짜 목록, seen = false 이면 미확인으로 되돌림 */
 function uiSetSeen(key, type, ids, seen) {
   checkKey_(key);
-  const name = type === 'brief' ? 'briefs' : 'memos', k = type === 'brief' ? 'date' : 'id';
+  const name = type === 'brief' ? 'briefs' : type === 'item' ? 'items' : 'memos', k = type === 'brief' ? 'date' : 'id';
   ids = (Array.isArray(ids) ? ids : [ids]).map(String);
   withLock_(() => {
     const at = seen === false ? '' : nowIso_();
     readAll_(name).filter(o => ids.indexOf(String(o[k])) >= 0)
       .forEach(o => patchRow_(name, o._row, { seenAt: at }));
   });
+  return uiLoad(key);
+}
+
+/** 관리 카테고리 지정: type = "item" | "memo" */
+function uiSetDomain(key, type, id, domain) {
+  checkKey_(key);
+  const name = type === 'item' ? 'items' : 'memos';
+  withLock_(() => {
+    const o = findBy_(name, 'id', id);
+    if (o) patchRow_(name, o._row, { domain: domains_().indexOf(domain) >= 0 ? domain : '' });
+  });
+  return uiLoad(key);
+}
+
+/** 관리 카테고리 목록 저장 (순서대로) */
+function uiSaveDomains(key, list) {
+  checkKey_(key);
+  const clean = (list || []).map(x => String(x).replace(/,/g, ' ').trim()).filter(Boolean)
+    .filter((x, i, a) => a.indexOf(x) === i).slice(0, 20);
+  if (!clean.length) throw new Error('카테고리가 하나 이상 있어야 해요.');
+  withLock_(() => setSetting_('관리카테고리', clean.join(',')));
   return uiLoad(key);
 }
 
