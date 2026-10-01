@@ -171,6 +171,17 @@ nav .nb{position:absolute;top:0;left:50%;margin-left:6px;background:var(--up);co
 .month{font-size:13px;font-weight:700;color:var(--sub);margin:16px 0 8px}
 .clampbox{position:relative;max-height:300px;overflow:hidden}
 .clampbox.open{max-height:none}
+.track summary{cursor:pointer;font-weight:700;color:var(--sub);font-size:13px;list-style:none}
+.track summary::-webkit-details-marker{display:none}
+.track[open] summary{margin-bottom:8px}
+.trow{display:flex;gap:8px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--line)}
+.trow:first-of-type{border-top:0}
+.trow .tx{flex:1;min-width:0;font-size:14px}
+.trow .tt{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.trow .tx .meta{font-size:12px;color:var(--faint)}
+.tbtn.trk{background:var(--warn-soft);color:var(--warn);font-weight:700}
+#chat-track{flex:none;width:40px;height:40px;border-radius:50%;border:1px solid var(--line);background:var(--card);font-size:18px;opacity:.55}
+#chat-track.on,#memo-track.on{opacity:1;border-color:var(--warn);background:var(--warn-soft)}
 .pair{position:relative}
 .drag{position:absolute;left:-2px;top:0;bottom:40px;width:16px;cursor:grab;touch-action:none;z-index:3;border-radius:14px 0 0 14px}
 .drag:hover{background:rgba(127,127,127,.12)}
@@ -233,7 +244,7 @@ nav .nb{position:absolute;top:0;left:50%;margin-left:6px;background:var(--up);co
 
 <nav id="nav"></nav>
 
-<div id="chatbar" class="chatbar hidden"><textarea id="chat-in" rows="1" placeholder="메모 입력…"></textarea><button id="chat-send" aria-label="보내기">↑</button></div>
+<div id="chatbar" class="chatbar hidden"><button id="chat-track" title="🎯 추적: 매일 브리핑에서 진행 상황을 챙겨요">🎯</button><textarea id="chat-in" rows="1" placeholder="메모 입력…"></textarea><button id="chat-send" aria-label="보내기">↑</button></div>
 <div class="sheet-bg" id="sheetBg"><div class="sheet" id="sheet"></div></div>
 <div class="toast" id="toast"></div>
 
@@ -395,18 +406,34 @@ function itemCard(it, mode){
       ${it.hasNewComment?'<span class="chip new">답변 대기</span>':''}</div>
     ${it.title?`<div class="ititle">${esc(it.title)}</div>`:''}${body}
     <div class="tools">${btn}<button class="tbtn" data-toggle="${esc(k)}" data-state="${open?1:0}">💬 코멘트 ${nc||''}</button>
+      <button class="tbtn ${it.pinned?'trk':''}" data-track="item|${esc(it.id)}|${it.pinned?0:1}">🎯${it.pinned?' 추적 중':' 추적'}</button>
       <span class="faint" style="margin-left:auto">${memoIdsOf(it).length?`🔗 메모 ${memoIdsOf(it).length}`:''}</span><button class="tbtn" data-emenu="item|${esc(it.id)}">⋯</button></div>
     ${commentThread('item', it.id, it.comments, open)}</section>`;
+}
+// 🎯 추적: 메모·답변의 pinned. 아침 루틴이 매일 [고정 추적]으로 진행 상황을 써 준다
+function trackedList(){
+  const d=S.data;
+  return d.memos.filter(m=>m.pinned).map(m=>({type:'memo',id:m.id,title:String(m.text).split('\n')[0].slice(0,80),date:m.day,o:m}))
+    .concat((d.items||[]).filter(i=>i.pinned).map(i=>({type:'item',id:i.id,title:i.title||String(i.body).replace(/[•▸↳]/g,'').slice(0,80),date:i.date,o:i})));
+}
+function trackCard(){
+  const list=trackedList(), b=S.data.briefs.find(x=>x.sec_tracking && String(x.sec_tracking).trim());
+  if (!list.length && !b) return '';
+  return `<details class="card track" ${S.trackOpen===false?'':'open'}><summary>🎯 추적 중 ${list.length}건 <span class="faint">(눌러서 ${S.trackOpen===false?'펴기':'접기'})</span></summary>
+    ${b?`<div class="faint" style="margin:2px 0 4px">${md(b.date)} 진행 상황</div>${renderLines(b.sec_tracking)}`:''}
+    ${list.length?`<div style="margin-top:10px">${list.map(t=>`<div class="trow"><div class="tx"><div class="meta">${t.type==='memo'?'내 메모':'답변'} · ${md(t.date)}${t.o.domain?' · '+esc(t.o.domain):''}</div><div class="tt">${esc(t.title)}</div></div>
+      <button class="tbtn" data-track="${t.type}|${esc(t.id)}|0">추적 해제</button></div>`).join('')}</div>`
+      :`<div class="faint" style="margin-top:8px">추적 중인 항목이 없어요. 메모나 답변 카드의 🎯 버튼을 누르면 매일 진행 상황을 챙겨 드려요.</div>`}</details>`;
 }
 function indicatorsCard(){
   const b=S.data.briefs.find(x=>x.sec_indicators && String(x.sec_indicators).trim());
   if (!b) return '';
-  return `<details class="card daily" ${S.dailyOpen===false?'':'open'}><summary>📈 관심 지표 · ${md(b.date)} <span class="faint">(눌러서 접기)</span></summary>${renderIndicators(b.sec_indicators)}</details>`;
+  return `<details class="card daily" ${S.dailyOpen===false?'':'open'}><summary>📈 증시 · 관심 지표 · ${md(b.date)} <span class="faint">(눌러서 접기)</span></summary>${renderIndicators(b.sec_indicators)}</details>`;
 }
 function viewToday(){
   const d=S.data, items=unseenList('item');
-  if (!items.length) return indicatorsCard() + `<div class="card empty">새 브리핑이 없어요 👏<br><span class="faint">확인한 답변은 [기록]에 날짜별로, [관리]에 카테고리별로 있어요.</span></div>`;
-  let html = indicatorsCard() + `<div class="card bar"><b>새 브리핑 ${items.length}건</b><span class="faint sp">읽고 [✓ 확인]을 누르면 여기서 내려가고 [기록]에 저장돼요</span></div>`;
+  if (!items.length) return indicatorsCard() + trackCard() + `<div class="card empty">새 브리핑이 없어요 👏<br><span class="faint">확인한 답변은 [기록]에 날짜별로, [관리]에 카테고리별로 있어요.</span></div>`;
+  let html = indicatorsCard() + trackCard() + `<div class="card bar"><b>📋 일일 브리핑 ${items.length}건</b><span class="faint sp">읽고 [✓ 확인]을 누르면 여기서 내려가고 [기록]에 저장돼요</span></div>`;
   let last=null, buf='';
   const flush = () => { if (buf) { html += `<div class="bgrid">${buf}</div>`; buf=''; } };
   items.slice().sort((a,b)=>String(b.date).localeCompare(String(a.date))||String(a.createdAt).localeCompare(String(b.createdAt))).forEach(it => {
@@ -486,10 +513,10 @@ function memoCard(m){
     <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:6px">
       ${seen?'':'<span class="chip unseen">새 답글</span>'}<span class="faint">${ago(m.createdAt) || md(m.day)}</span>
       ${m.domain?`<span class="chip dom">${esc(m.domain)}</span>`:''}
-      ${m.status==='new'?'<span class="chip new">다음 브리핑 대기</span>':''}${m.status==='note'?'<span class="chip">관리 노트</span>':''}${m.pinned?'<span class="chip pin">고정</span>':''}
+      ${m.status==='new'?'<span class="chip new">다음 브리핑 대기</span>':''}${m.status==='note'?'<span class="chip">관리 노트</span>':''}${m.pinned?'<span class="chip pin">🎯 추적</span>':''}
       ${m.hasNewComment?'<span class="chip new">답변 대기</span>':''}</div>
     <div class="memo-text">${linkify(m.text)}</div>
-    <div class="tools">${seen?'':`<button class="tbtn seen" data-seen="memo|${esc(m.id)}|1">답글 확인</button>`}<button class="tbtn ${m.pinned?'on':''}" data-pin="${esc(k)}">📌</button>
+    <div class="tools">${seen?'':`<button class="tbtn seen" data-seen="memo|${esc(m.id)}|1">답글 확인</button>`}<button class="tbtn ${m.pinned?'trk':''}" data-track="memo|${esc(m.id)}|${m.pinned?0:1}">🎯${m.pinned?' 추적 중':''}</button>
       <button class="tbtn" data-toggle="${esc(k)}" data-state="${open?1:0}">💬 ${nc||''}</button>
       <button class="tbtn" data-edit-m="${esc(m.id)}">편집</button>
       <button class="tbtn danger" data-del-m="${esc(m.id)}">삭제</button></div>
@@ -503,7 +530,7 @@ function viewMemo(){
   else if(f==='new') list=list.filter(m=>m.status==='new'); else if(f==='pinned') list=list.filter(m=>m.pinned);
   else if(f!=='all') list=list.filter(m=>m.category===f);
   let html = `<section class="card composer"><textarea id="memo-in" placeholder="떠오른 걸 적어 두세요 (Ctrl+Enter 저장). 아침 브리핑에서 정리·분류해 드려요."></textarea>
-    <div class="form-row"><button class="btn" id="memo-send">저장</button></div></section>
+    <div class="form-row"><button class="btn ghost ${S.trackNext?'on':''}" id="memo-track" style="flex:none">🎯 추적</button><button class="btn" id="memo-send">저장</button></div></section>
     <div class="cats" style="margin-top:0">${filters.map(([v,l])=>`<button data-mf="${esc(v)}" class="${f===v?'on':''}">${esc(l)}</button>`).join('')}</div>`;
   if (!list.length) return html + `<div class="empty">${f==='unseen'?'새 답글이 없어요.':'메모가 없어요. 입력창에 적어 보세요.'}</div>`;
   // 날짜 → 카테고리 순으로 묶는다
@@ -666,7 +693,7 @@ function entryCard(e){
   if (type==='memo'){
     const ans=answersFor(o.id);
     inner = `<div class="mine-q"><div class="who">${o.status==='note'?'내 정리':'내 메모'} · ${md(o.day)}
-        ${o.status==='new'?' · <span class="chip new">다음 아침 분석</span>':''}${o.folder?` · 📁 ${esc(o.folder)}`:''}${o.mpin?' · 📌':''}${o.hidden?' · 숨김':''}</div>
+        ${o.status==='new'?' · <span class="chip new">다음 아침 분석</span>':''}${o.folder?` · 📁 ${esc(o.folder)}`:''}${o.pinned?' · 🎯 추적':''}${o.mpin?' · 📌':''}${o.hidden?' · 숨김':''}</div>
       <div class="memo-text">${linkify(o.text)}</div></div>
       ${ans.length ? ans.map(a => answerBlock(a, o.id)).join('') : (o.status==='new'?'<div class="ans"><div class="faint">다음 아침 브리핑에서 답변이 붙어요</div></div>':'')}`;
   } else {
@@ -674,7 +701,8 @@ function entryCard(e){
   }
   return `<div class="pair ${o.hidden?'hid':''}" data-key="${type}|${esc(o.id)}" data-sk="${sortKey(e)}"><div class="drag" title="끌어서 순서 바꾸기"></div><div class="clampbox ${ex?'open':''}" data-cb="${esc(key)}">${inner}</div>
     <div class="ebar"><button class="morebtn" data-expand="${esc(key)}">${ex?'접기 ▲':'더 보기 ▼'}</button><span class="sp"></span>
-      <button class="tbtn ${o.mpin?'on':''}" data-mpin="${type}|${esc(o.id)}|${o.mpin?0:1}">📌</button>
+      <button class="tbtn ${o.pinned?'trk':''}" data-track="${type}|${esc(o.id)}|${o.pinned?0:1}" title="매일 브리핑에서 추적">🎯</button>
+      <button class="tbtn ${o.mpin?'on':''}" data-mpin="${type}|${esc(o.id)}|${o.mpin?0:1}" title="관리 맨 위에 고정">📌</button>
       <button class="tbtn" data-emenu="${type}|${esc(o.id)}">⋯</button></div></div>`;
 }
 const shiftMonth = (ym, n) => { let [y,m]=ym.split('-').map(Number); m+=n; while(m<1){m+=12;y--;} while(m>12){m-=12;y++;} return `${y}-${String(m).padStart(2,'0')}`; };
@@ -856,6 +884,9 @@ document.addEventListener('click', async e => {
   if (ds.folderDel){ if(!confirm(`"${ds.folderDel}" 폴더를 삭제할까요? (안의 기록은 "폴더 없음"으로 옮겨져요)`)) return; await act('uiDeleteFolder', S.dom, ds.folderDel); return; }
   if (t.id==='toggle-hidden'){ S.showHidden=!S.showHidden; render(); return; }
   if (ds.expand){ S.expand[ds.expand]=!S.expand[ds.expand]; render(); return; }
+  if (ds.track){ const [ty,id,v]=ds.track.split('|'); await act('uiSetEntry', ty, id, {pinned: v==='1'});
+    toast(v==='1'?'🎯 추적 시작 · 매일 브리핑에서 진행 상황을 챙겨요':'추적을 해제했어요'); return; }
+  if (t.id==='chat-track' || t.id==='memo-track'){ S.trackNext=!S.trackNext; t.classList.toggle('on', S.trackNext); toast(S.trackNext?'다음 메모를 🎯 추적으로 저장해요':'추적 끔'); return; }
   if (ds.mpin){ const [ty,id,v]=ds.mpin.split('|'); await act('uiSetEntry', ty, id, {mpin: v==='1'}); toast(v==='1'?'맨 위에 고정했어요':'고정을 풀었어요'); return; }
   if (ds.emenu){ const [ty,id]=ds.emenu.split('|'); entrySheet(ty,id); return; }
   if (t.id==='em-save'){ const [ty,id]=ds.em.split('|'); const p={domain:$('#em-dom').value, folder:$('#em-folder').value}; closeSheet(); await act('uiSetEntry', ty, id, p); return; }
@@ -959,7 +990,11 @@ document.addEventListener('touchend', e => {
   if (DR || S.month==='all') return;
   if (Math.abs(dx)>70 && Math.abs(dy)<50){ S.month=shiftMonth(S.month, dx<0?1:-1); render(); toast(`${+S.month.slice(5)}월`); }
 }, {passive:true});
-document.addEventListener('toggle', e => { if (e.target.classList && e.target.classList.contains('daily')) S.dailyOpen = e.target.open; }, true);
+document.addEventListener('toggle', e => { const c=e.target.classList; if (!c) return;
+  if (c.contains('daily')) S.dailyOpen = e.target.open;
+  if (c.contains('track')) { S.trackOpen = e.target.open; try{ localStorage.setItem('track_open', e.target.open?'1':'0'); }catch(_){} const f=e.target.querySelector('summary .faint'); if(f) f.textContent=`(눌러서 ${e.target.open?'접기':'펴기'})`; }
+}, true);
+try { if (localStorage.getItem('track_open')==='0') S.trackOpen=false; } catch(_){}
 document.addEventListener('input', e => {
   const t=e.target, ds=t.dataset;
   if (ds.wlPrompt!==undefined){ wlItems()[+ds.wlPrompt].prompt = t.value; S.wlDirty=true; const b=$('#wl-save'); if(b){b.disabled=false;b.textContent='변경 내용 저장';} }
@@ -973,7 +1008,12 @@ async function sendChat(el){
   el.value=''; el.style.height='';
   const now=new Date().toISOString();
   S.data.memos.unshift({id:'tmp',text:v,status:'new',day:S.data.today,createdAt:now,seenAt:now,comments:[]}); S.memoFilter='all'; render(); window.scrollTo(0,0);
-  try { S.data = await call('uiAddMemo', v, ''); render(); toast('저장됨'); }
+  try {
+    S.data = await call('uiAddMemo', v, '');
+    if (S.trackNext) { const m=S.data.memos.filter(x=>x.text===v).sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)))[0];
+      if (m) S.data = await call('uiSetEntry', 'memo', m.id, {pinned:true}); S.trackNext=false; $('#chat-track').classList.remove('on'); }
+    render(); toast('저장됨');
+  }
   catch(e){ el.value=v; S.data.memos=S.data.memos.filter(m=>m.id!=='tmp'); render(); }
 }
 document.getElementById('chat-send').addEventListener('click', () => sendChat($('#chat-in')));
