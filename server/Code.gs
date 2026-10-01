@@ -20,13 +20,14 @@ const SCHEMA = {
   briefs: { sheet: '브리핑', key: 'date', bools: ['pinned'], cols: [
     ['date', '날짜'], ['header', '헤더'], ...SECTIONS,
     ['memoCount', '메모수'], ['commentCount', '댓글수'], ['pinned', '고정'], ['createdAt', '작성시각'], ['seenAt', '확인시각']] },
-  memos: { sheet: '메모', key: 'id', bools: ['pinned'], cols: [
+  memos: { sheet: '메모', key: 'id', bools: ['pinned', 'mpin', 'hidden'], cols: [
     ['id', 'id'], ['day', '날짜'], ['text', '내용'], ['status', '상태'], ['category', '카테고리'],
     ['pinned', '고정'], ['createdAt', '작성시각'], ['updatedAt', '수정시각'], ['sentAt', '처리시각'], ['source', '출처'],
-    ['seenAt', '확인시각'], ['domain', '관리']] },
-  items: { sheet: '항목', key: 'id', bools: ['pinned'], cols: [
+    ['seenAt', '확인시각'], ['domain', '관리'], ['folder', '폴더'], ['mpin', '관리고정'], ['hidden', '숨김']] },
+  items: { sheet: '항목', key: 'id', bools: ['pinned', 'mpin', 'hidden'], cols: [
     ['id', 'id'], ['date', '날짜'], ['section', '섹션'], ['title', '제목'], ['body', '내용'], ['domain', '관리'],
-    ['createdAt', '작성시각'], ['seenAt', '확인시각'], ['pinned', '고정'], ['memoIds', '메모id']] },
+    ['createdAt', '작성시각'], ['seenAt', '확인시각'], ['pinned', '고정'], ['memoIds', '메모id'],
+    ['folder', '폴더'], ['mpin', '관리고정'], ['hidden', '숨김']] },
   comments: { sheet: '댓글', key: 'id', bools: ['seen'], cols: [
     ['id', 'id'], ['targetType', '대상'], ['targetId', '대상id'], ['by', '작성자'], ['text', '내용'],
     ['createdAt', '작성시각'], ['seen', '확인']] },
@@ -44,6 +45,12 @@ const SCHEMA = {
 
 const CATEGORIES = ['일정', '할 일', '분석', '결정', '생각', '기타'];
 const DEFAULT_DOMAINS = ['금융', '부동산', '인사이트', '전공', '사업', '기타'];
+const TABS = ['today', 'memo', 'plan', 'history', 'watch', 'manage'];
+const SCHEMA_VERSION = 'v4';
+
+/* 한 번의 실행 안에서 같은 시트를 여러 번 읽지 않도록 캐시 (쓰기 때마다 비움) */
+const RC_ = {}, HC_ = {};
+function invalidate_(name) { delete RC_[name]; }
 
 /* ───────────── 공통 유틸 ───────────── */
 
@@ -58,7 +65,11 @@ function apiKey_() {
 /** 설치 스크립트로 배포한 경우 첫 접속 때 시트 구성·이관을 자동으로 한다. */
 function ensureSetup_() {
   if (ss_().getSheetByName('설정') && PropertiesService.getScriptProperties().getProperty('API_KEY')) {
-    ensureSheet_('items'); ensureColumns_('watchlist'); ensureColumns_('memos'); ensureColumns_('briefs'); ensureColumns_('items'); return;
+    const cache = CacheService.getScriptCache();
+    if (cache.get('schema') === SCHEMA_VERSION) return;
+    ensureSheet_('items'); ensureColumns_('watchlist'); ensureColumns_('memos'); ensureColumns_('briefs'); ensureColumns_('items');
+    cache.put('schema', SCHEMA_VERSION, 21600);
+    return;
   }
   withLock_(() => {
     if (ss_().getSheetByName('설정') && PropertiesService.getScriptProperties().getProperty('API_KEY')) return;
@@ -102,6 +113,7 @@ function ensureColumns_(name) {
       sh.getRange(1, col).setValue(label).setFontWeight('bold').setBackground('#eef2f7');
       sh.getRange(2, col, Math.max(sh.getMaxRows() - 1, 1), 1).setNumberFormat('@');
       header.push(label);
+      delete HC_[name];
     }
   });
 }
@@ -115,6 +127,7 @@ function sheetOf_(name) {
 
 /** 헤더 이름으로 열을 찾으므로 사용자가 시트에서 열 순서를 바꿔도 동작한다. */
 function colMap_(name, sh) {
+  if (HC_[name]) return HC_[name];
   const s = SCHEMA[name];
   const header = sh.getRange(1, 1, 1, Math.max(sh.getLastColumn(), 1)).getValues()[0].map(String);
   const map = {};
@@ -122,10 +135,11 @@ function colMap_(name, sh) {
     const i = header.indexOf(label);
     if (i >= 0) map[field] = i;
   });
-  return { map, width: header.length };
+  return (HC_[name] = { map, width: header.length });
 }
 
 function readAll_(name) {
+  if (RC_[name]) return RC_[name].map(o => Object.assign({}, o));
   const s = SCHEMA[name];
   const sh = sheetOf_(name);
   const { map } = colMap_(name, sh);
@@ -143,7 +157,8 @@ function readAll_(name) {
     });
     if (String(o[s.key] || '') !== '') out.push(o);
   });
-  return out;
+  RC_[name] = out;
+  return out.map(o => Object.assign({}, o));
 }
 
 function rowFrom_(name, sh, obj, base) {
@@ -160,6 +175,7 @@ function append_(name, objs) {
   const sh = sheetOf_(name);
   const rows = objs.map(o => rowFrom_(name, sh, o));
   sh.getRange(sh.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
+  invalidate_(name);
 }
 
 function patchRow_(name, rowNum, patch) {
@@ -167,6 +183,7 @@ function patchRow_(name, rowNum, patch) {
   const width = sh.getLastColumn();
   const base = sh.getRange(rowNum, 1, 1, width).getValues()[0];
   sh.getRange(rowNum, 1, 1, width).setValues([rowFrom_(name, sh, patch, base)]);
+  invalidate_(name);
 }
 
 function findBy_(name, field, value) {
@@ -183,6 +200,7 @@ function deleteBy_(name, field, value) {
   const sh = sheetOf_(name);
   readAll_(name).filter(o => String(o[field]) === String(value))
     .map(o => o._row).sort((a, b) => b - a).forEach(r => sh.deleteRow(r));
+  invalidate_(name);
 }
 
 function strip_(o) { const c = Object.assign({}, o); delete c._row; return c; }
@@ -198,6 +216,14 @@ function domains_() {
   const list = v ? v.split(',').map(x => x.trim()).filter(Boolean) : [];
   return list.length ? list : DEFAULT_DOMAINS.slice();
 }
+function jsonSetting_(k, dflt) { try { const v = getSetting_(k); return v ? JSON.parse(v) : dflt; } catch (e) { return dflt; } }
+function tabs_() {
+  const t = jsonSetting_('탭설정', {});
+  const order = (t.order || []).filter(x => TABS.indexOf(x) >= 0);
+  TABS.forEach(x => { if (order.indexOf(x) < 0) order.push(x); });
+  return { order, hidden: (t.hidden || []).filter(x => TABS.indexOf(x) >= 0) };
+}
+function folders_() { return jsonSetting_('관리폴더', {}); }
 function getSetting_(k) { const r = findBy_('settings', 'key', k); return r ? String(r.value) : ''; }
 function setSetting_(k, v) { upsert_('settings', { key: k, value: v }); }
 
@@ -390,7 +416,7 @@ function replaceWatchlist_(items, prompt, updatedAt) {
   const old = {};
   readAll_('watchlist').forEach(w => { old[w.symbol] = w; });
   const sh = sheetOf_('watchlist');
-  if (sh.getLastRow() > 1) sh.getRange(2, 1, sh.getLastRow() - 1, sh.getLastColumn()).clearContent();
+  if (sh.getLastRow() > 1) sh.getRange(2, 1, sh.getLastRow() - 1, sh.getLastColumn()).clearContent(); invalidate_('watchlist');
   append_('watchlist', (items || []).filter(it => it && it.symbol).map((it, i) => {
     const o = old[it.symbol] || {};
     const en = it.enabled !== undefined ? it.enabled !== false : !(o.enabled === false || o.enabled === 'FALSE');
@@ -478,6 +504,7 @@ function apiPush_(body) {
     const sh = sheetOf_('items');
     readAll_('items').filter(i => i.date === date && !i.seenAt && !(cmt['item:' + i.id] || []).length)
       .map(i => i._row).sort((a, b) => b - a).forEach(r => sh.deleteRow(r));
+    invalidate_('items');
     const add = body.items.filter(it => it && (it.title || it.body)).map(it => ({
       id: newId_('i'), date, section: it.section || '', title: it.title || '', body: it.body || '',
       domain: doms.indexOf(it.domain) >= 0 ? it.domain : '기타', createdAt: now, seenAt: '', pinned: false,
@@ -525,7 +552,7 @@ function importData_(d) {
 /* ───────────── 앱 화면용 함수 (google.script.run 또는 외부 앱의 POST action:"ui") ───────────── */
 
 const UI_FUNCS = { uiLoad, uiAddMemo, uiEditMemo, uiDeleteMemo, uiTogglePin, uiAddComment, uiDeleteComment,
-  uiSetSeen, uiSetDomain, uiSaveDomains, uiSaveSchedule, uiSetDone, uiDelete, uiAddTodo, uiSaveWatchlist, uiSearch, uiQuotes };
+  uiSetSeen, uiSetDomain, uiSaveDomains, uiSetEntry, uiDeleteItem, uiSaveTabs, uiSaveFolders, uiRenameFolder, uiDeleteFolder, uiSaveSchedule, uiSetDone, uiDelete, uiAddTodo, uiSaveWatchlist, uiSearch, uiQuotes };
 
 function uiDispatch_(body) {
   const fn = UI_FUNCS[body.fn];
@@ -548,17 +575,19 @@ function uiLoad(key) {
   const items = readAll_('items').map(i => attach_('item', i, idx))
     .sort((a, b) => String(b.date).localeCompare(String(a.date)) || String(a.createdAt).localeCompare(String(b.createdAt)))
     .slice(0, 800);
-  return { today: today_(), sections: SECTIONS, categories: CATEGORIES, domains: domains_(), briefs, memos, items, schedules, todos,
+  return { today: today_(), sections: SECTIONS, categories: CATEGORIES, domains: domains_(), tabs: tabs_(), folders: folders_(),
+    briefs, memos, items, schedules, todos,
     watchlist: { items: watchlist_(), prompt: getSetting_('지표공통프롬프트') } };
 }
 
-function uiAddMemo(key, text, category, domain) {
+/** analyze=false 면 "관리 노트"(status=note)로 저장해 아침 분석에서 빠진다 */
+function uiAddMemo(key, text, category, domain, analyze, folder) {
   checkKey_(key);
   text = String(text || '').trim();
   if (!text) throw new Error('내용이 비어 있습니다.');
   const now = nowIso_();
   // 직접 쓴 메모는 쓰는 순간 본 것으로 둔다. Claude 답글이 달리면 다시 미확인이 된다.
-  withLock_(() => append_('memos', [{ id: newId_('m'), day: today_(), text, status: 'new',
+  withLock_(() => append_('memos', [{ id: newId_('m'), day: today_(), text, status: analyze === false ? 'note' : 'new', folder: folder || '',
     category: CATEGORIES.indexOf(category) >= 0 ? category : '', pinned: false, createdAt: now, source: 'app', seenAt: now,
     domain: domains_().indexOf(domain) >= 0 ? domain : '' }]));
   return uiLoad(key);
@@ -588,6 +617,7 @@ function uiDeleteMemo(key, id) {
     deleteBy_('memos', 'id', id);
     readAll_('comments').filter(c => c.targetType === 'memo' && c.targetId === id)
       .map(c => c._row).sort((a, b) => b - a).forEach(r => sheetOf_('comments').deleteRow(r));
+    invalidate_('comments');
   });
   return uiLoad(key);
 }
@@ -637,6 +667,71 @@ function uiSetDomain(key, type, id, domain) {
   withLock_(() => {
     const o = findBy_(name, 'id', id);
     if (o) patchRow_(name, o._row, { domain: domains_().indexOf(domain) >= 0 ? domain : '' });
+  });
+  return uiLoad(key);
+}
+
+/** 관리 화면용 필드 변경: type = "item" | "memo", patch 에서 domain/folder/mpin/hidden 만 받는다 */
+function uiSetEntry(key, type, id, patch) {
+  checkKey_(key);
+  const name = type === 'item' ? 'items' : 'memos', p = {};
+  if (patch && patch.domain !== undefined) p.domain = domains_().indexOf(patch.domain) >= 0 ? patch.domain : '';
+  if (patch && patch.folder !== undefined) p.folder = String(patch.folder || '');
+  if (patch && patch.mpin !== undefined) p.mpin = !!patch.mpin;
+  if (patch && patch.hidden !== undefined) p.hidden = !!patch.hidden;
+  withLock_(() => { const o = findBy_(name, 'id', id); if (o) patchRow_(name, o._row, p); });
+  return uiLoad(key);
+}
+
+function uiDeleteItem(key, id) {
+  checkKey_(key);
+  withLock_(() => {
+    deleteBy_('items', 'id', id);
+    readAll_('comments').filter(c => c.targetType === 'item' && c.targetId === id)
+      .map(c => c._row).sort((a, b) => b - a).forEach(r => sheetOf_('comments').deleteRow(r));
+    invalidate_('comments');
+  });
+  return uiLoad(key);
+}
+
+/** 탭 순서·숨김 저장 (폰·PC 공통) */
+function uiSaveTabs(key, cfg) {
+  checkKey_(key);
+  const order = (cfg && cfg.order || []).filter(x => TABS.indexOf(x) >= 0);
+  TABS.forEach(x => { if (order.indexOf(x) < 0) order.push(x); });
+  const hidden = (cfg && cfg.hidden || []).filter(x => TABS.indexOf(x) >= 0);
+  if (hidden.length >= TABS.length) throw new Error('탭이 하나는 보여야 해요.');
+  withLock_(() => setSetting_('탭설정', JSON.stringify({ order, hidden })));
+  return uiLoad(key);
+}
+
+/** 카테고리 안의 폴더 목록 저장 */
+function uiSaveFolders(key, domain, list) {
+  checkKey_(key);
+  const clean = (list || []).map(x => String(x).trim()).filter(Boolean).filter((x, i, a) => a.indexOf(x) === i).slice(0, 30);
+  withLock_(() => { const f = folders_(); f[domain] = clean; setSetting_('관리폴더', JSON.stringify(f)); });
+  return uiLoad(key);
+}
+
+function uiRenameFolder(key, domain, from, to) {
+  checkKey_(key);
+  to = String(to || '').trim();
+  if (!to) throw new Error('폴더 이름을 적어 주세요.');
+  withLock_(() => {
+    const f = folders_(); f[domain] = (f[domain] || []).map(x => x === from ? to : x); setSetting_('관리폴더', JSON.stringify(f));
+    ['memos', 'items'].forEach(n => readAll_(n).filter(o => o.domain === domain && o.folder === from)
+      .forEach(o => patchRow_(n, o._row, { folder: to })));
+  });
+  return uiLoad(key);
+}
+
+/** 폴더 삭제: 안의 기록은 지우지 않고 "폴더 없음"으로 */
+function uiDeleteFolder(key, domain, name) {
+  checkKey_(key);
+  withLock_(() => {
+    const f = folders_(); f[domain] = (f[domain] || []).filter(x => x !== name); setSetting_('관리폴더', JSON.stringify(f));
+    ['memos', 'items'].forEach(n => readAll_(n).filter(o => o.domain === domain && o.folder === name)
+      .forEach(o => patchRow_(n, o._row, { folder: '' })));
   });
   return uiLoad(key);
 }
@@ -700,7 +795,7 @@ function uiSaveWatchlist(key, items, prompt) {
     const old = {};
     readAll_('watchlist').forEach(w => { old[w.symbol] = w; });
     const sh = sheetOf_('watchlist');
-    if (sh.getLastRow() > 1) sh.getRange(2, 1, sh.getLastRow() - 1, sh.getLastColumn()).clearContent();
+    if (sh.getLastRow() > 1) sh.getRange(2, 1, sh.getLastRow() - 1, sh.getLastColumn()).clearContent(); invalidate_('watchlist');
     const rows = (items || []).filter(it => it && it.symbol).map((it, i) => {
       const o = old[it.symbol] || {};
       return { order: i + 1, label: it.label || it.symbol, symbol: String(it.symbol).trim(), prompt: it.prompt || '',

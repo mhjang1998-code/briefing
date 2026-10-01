@@ -169,6 +169,28 @@ nav .nb{position:absolute;top:0;left:50%;margin-left:6px;background:var(--up);co
 .tl .card::before{content:"";position:absolute;left:-19px;top:18px;width:10px;height:10px;border-radius:50%;background:var(--accent);border:2px solid var(--bg)}
 .tl .card.mine::before{background:var(--warn)}
 .month{font-size:13px;font-weight:700;color:var(--sub);margin:16px 0 8px}
+.clampbox{position:relative;max-height:300px;overflow:hidden}
+.clampbox.open{max-height:none}
+.clampbox.short{max-height:none}
+.clampbox.short::after{display:none}
+.pair .mine-q:last-child{border-radius:14px}
+.clampbox:not(.open)::after{content:"";position:absolute;left:0;right:0;bottom:0;height:56px;background:linear-gradient(transparent,var(--card))}
+.morebtn{border:0;background:none;color:var(--accent);font-size:13px;font-weight:700;padding:6px 0 0}
+.ebar{display:flex;gap:6px;align-items:center;margin-top:8px}
+.ebar .sp{flex:1}
+.fchips{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 12px}
+.fchips button{border:1px solid var(--line);background:var(--card);color:var(--sub);border-radius:99px;padding:4px 12px;font-size:13px}
+.fchips button.on{background:var(--ink);border-color:var(--ink);color:var(--bg)}
+.jump{display:flex;gap:6px;align-items:center;margin:0 0 6px;flex-wrap:wrap}
+.jump select{width:auto;padding:6px 8px;font-size:15px}
+.monthnav .side{color:var(--sub);font-size:14px;min-width:64px}
+.pinhead{font-size:13px;font-weight:700;color:var(--warn);margin:4px 2px 8px}
+.hid{opacity:.55}
+.tabrow{display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--line)}
+.tabrow:first-of-type{border-top:0}
+.tabrow .nm{flex:1;font-weight:600}
+.chk-inline{display:flex;align-items:center;gap:6px;font-size:14px;color:var(--sub);margin:8px 0}
+.chk-inline input{width:18px;height:18px}
 .bgrid{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;align-items:start}
 .bgrid>.card{margin:0}
 .monthnav{display:flex;align-items:center;justify-content:center;gap:10px;margin:4px 0 12px}
@@ -196,17 +218,10 @@ nav .nb{position:absolute;top:0;left:50%;margin-left:6px;background:var(--up);co
 </style>
 </head>
 <body>
-<header><h1 id="title">오늘</h1><button class="icon-btn" id="refresh" aria-label="새로고침">↻</button></header>
+<header><h1 id="title">브리핑</h1><button class="icon-btn" id="settings" aria-label="탭 설정">⚙️</button><button class="icon-btn" id="refresh" aria-label="새로고침">↻</button></header>
 <main id="view"><div class="empty">불러오는 중…</div></main>
 
-<nav id="nav">
-  <button data-tab="today" class="on"><span class="i">📋</span>브리핑<span class="nb hidden" id="nb-today"></span></button>
-  <button data-tab="memo"><span class="i">📝</span>메모<span class="nb hidden" id="nb-memo"></span></button>
-  <button data-tab="plan"><span class="i">🗓️</span>일정</button>
-  <button data-tab="history"><span class="i">📚</span>기록</button>
-  <button data-tab="watch"><span class="i">📈</span>지표</button>
-  <button data-tab="manage"><span class="i">🗂️</span>관리</button>
-</nav>
+<nav id="nav"></nav>
 
 <div id="chatbar" class="chatbar hidden"><textarea id="chat-in" rows="1" placeholder="메모 입력…"></textarea><button id="chat-send" aria-label="보내기">↑</button></div>
 <div class="sheet-bg" id="sheetBg"><div class="sheet" id="sheet"></div></div>
@@ -222,7 +237,9 @@ const CONN = (() => {
 })();
 const KEY = CONN.key;
 const S = { data:null, tab:'today', briefDate:null, open:{}, planSeg:'calendar', memoFilter:'all', memoAll:false,
-  histUnseen:false, cal:null, selDay:null, dom:null, domEdit:false, histSeg:'items', month:null };
+  histUnseen:false, cal:null, selDay:null, dom:null, domEdit:false, histSeg:'items', month:null,
+  folder:'*', folderEdit:false, showHidden:false, expand:{}, tabInit:false };
+const TAB_META = { today:['📋','브리핑'], memo:['📝','메모'], plan:['🗓️','일정'], history:['📚','기록'], watch:['📈','지표'], manage:['🗂️','관리'] };
 const MEMO_LIMIT = 40;
 const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -284,6 +301,11 @@ function unseenList(type){
 }
 const DAILY = ['sec_indicators','sec_schedule','sec_todo','sec_tracking'];   // 매일 새로 바뀌는 현황 섹션
 const domains = () => S.data.domains || ['금융','부동산','인사이트','전공','사업','기타'];
+const foldersOf = dom => ((S.data.folders||{})[dom]) || [];
+function folderSelect(type, id, dom, cur){
+  const fs = foldersOf(dom); if (!fs.length) return '';
+  return `<select class="domsel" data-set-folder="${type}|${esc(id)}" aria-label="폴더"><option value="">폴더 없음</option>${fs.map(f=>`<option ${f===cur?'selected':''}>${esc(f)}</option>`).join('')}</select>`;
+}
 function domSelect(type, id, cur){
   return `<select class="domsel" data-set-dom="${type}|${esc(id)}" aria-label="관리 카테고리">${(cur?[]:['<option value="">분류 안 됨</option>']).concat(domains().map(x=>`<option ${x===cur?'selected':''}>${esc(x)}</option>`)).join('')}</select>`;
 }
@@ -359,16 +381,21 @@ function itemCard(it, mode){
     : `<button class="tbtn seen" data-seen="item|${esc(it.id)}|1">✓ 확인</button>`;
   return `<section class="card item">
     <div class="ihead">${!seen&&it.seenAt?'<span class="chip unseen">새 답글</span>':''}<span class="chip sec">${esc(it.section||'브리핑')}</span>
-      <span class="faint" style="margin-left:auto">관리</span>${domSelect('item', it.id, it.domain)}
+      <span class="faint" style="margin-left:auto">관리</span>${domSelect('item', it.id, it.domain)}${folderSelect('item', it.id, it.domain, it.folder)}
       ${it.hasNewComment?'<span class="chip new">답변 대기</span>':''}</div>
     ${it.title?`<div class="ititle">${esc(it.title)}</div>`:''}${body}
     <div class="tools">${btn}<button class="tbtn" data-toggle="${esc(k)}" data-state="${open?1:0}">💬 코멘트 ${nc||''}</button></div>
     ${commentThread('item', it.id, it.comments, open)}</section>`;
 }
+function indicatorsCard(){
+  const b=S.data.briefs.find(x=>x.sec_indicators && String(x.sec_indicators).trim());
+  if (!b) return '';
+  return `<details class="card daily" ${S.dailyOpen===false?'':'open'}><summary>📈 관심 지표 · ${md(b.date)} <span class="faint">(눌러서 접기)</span></summary>${renderIndicators(b.sec_indicators)}</details>`;
+}
 function viewToday(){
   const d=S.data, items=unseenList('item');
-  if (!items.length) return `<div class="card empty">새 브리핑이 없어요 👏<br><span class="faint">확인한 답변은 [기록]에 날짜별로, [관리]에 카테고리별로 있어요.</span></div>`;
-  let html = `<div class="card bar"><b>새 브리핑 ${items.length}건</b><span class="faint sp">읽고 [✓ 확인]을 누르면 여기서 내려가고 [기록]에 저장돼요</span></div>`;
+  if (!items.length) return indicatorsCard() + `<div class="card empty">새 브리핑이 없어요 👏<br><span class="faint">확인한 답변은 [기록]에 날짜별로, [관리]에 카테고리별로 있어요.</span></div>`;
+  let html = indicatorsCard() + `<div class="card bar"><b>새 브리핑 ${items.length}건</b><span class="faint sp">읽고 [✓ 확인]을 누르면 여기서 내려가고 [기록]에 저장돼요</span></div>`;
   let last=null, buf='';
   const flush = () => { if (buf) { html += `<div class="bgrid">${buf}</div>`; buf=''; } };
   items.slice().sort((a,b)=>String(b.date).localeCompare(String(a.date))||String(a.createdAt).localeCompare(String(b.createdAt))).forEach(it => {
@@ -448,7 +475,7 @@ function memoCard(m){
     <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:6px">
       ${seen?'':'<span class="chip unseen">새 답글</span>'}<span class="faint">${ago(m.createdAt) || md(m.day)}</span>
       ${m.domain?`<span class="chip dom">${esc(m.domain)}</span>`:''}
-      ${m.status==='new'?'<span class="chip new">다음 브리핑 대기</span>':''}${m.pinned?'<span class="chip pin">고정</span>':''}
+      ${m.status==='new'?'<span class="chip new">다음 브리핑 대기</span>':''}${m.status==='note'?'<span class="chip">관리 노트</span>':''}${m.pinned?'<span class="chip pin">고정</span>':''}
       ${m.hasNewComment?'<span class="chip new">답변 대기</span>':''}</div>
     <div class="memo-text">${linkify(m.text)}</div>
     <div class="tools">${seen?'':`<button class="tbtn seen" data-seen="memo|${esc(m.id)}|1">답글 확인</button>`}<button class="tbtn ${m.pinned?'on':''}" data-pin="${esc(k)}">📌</button>
@@ -571,10 +598,11 @@ function wlChanged(){ S.wlDirty=true; render(); }
 /* ── 관리: 확인한 브리핑 항목 + 내 메모를 카테고리(금융·부동산…)별 시간순으로 ── */
 const memoIdsOf = it => String(it.memoIds||'').split(',').map(x=>x.trim()).filter(Boolean);
 function answersFor(memoId){ return (S.data.items||[]).filter(i => memoIdsOf(i).includes(memoId)); }
-function domEntries(dom){
-  const d=S.data, ms = d.memos.filter(m => m.domain===dom);
-  const linked = new Set(); ms.forEach(m => answersFor(m.id).forEach(i => linked.add(i.id)));
-  const its = (d.items||[]).filter(i => i.domain===dom && !linked.has(i.id) && isSeen(i,'item'));
+// 관리 기록 = 이 카테고리의 내 메모(+짝지은 답변) + 메모와 연결 안 된 확인한 답변. 월은 내가 쓴 날짜 기준
+function domEntries(dom, withHidden){
+  const d=S.data, ms = d.memos.filter(m => m.domain===dom && (withHidden || !m.hidden));
+  const linked = new Set(); d.memos.forEach(m => answersFor(m.id).forEach(i => linked.add(i.id)));
+  const its = (d.items||[]).filter(i => i.domain===dom && !linked.has(i.id) && isSeen(i,'item') && (withHidden || !i.hidden));
   return ms.map(m => ({kind:'memo', date:m.day, at:m.createdAt, o:m}))
     .concat(its.map(i => ({kind:'item', date:i.date, at:i.createdAt, o:i})))
     .sort((a,b)=>String(b.date).localeCompare(String(a.date))||String(b.at).localeCompare(String(a.at)));
@@ -585,18 +613,23 @@ function weekBars(entries){
   const mx=Math.max(1,...w);
   return `<div class="spark" title="최근 8주 (왼쪽이 오래된 주)">${w.map(n=>`<i class="${n?'':'z'}" style="height:${n?Math.max(15,n/mx*100):8}%"></i>`).join('')}</div>`;
 }
+function addBox(dom){
+  const doms=domains(), d0 = dom || S.addDom || doms[0], fs=foldersOf(d0);
+  return `<section class="card"><h2>${dom?esc(dom)+'에 ':''}새로 추가 (공부·정리·아이디어)</h2>
+    <textarea id="idea-in" style="min-height:72px" placeholder="공부하거나 정리한 내용을 적어 두세요"></textarea>
+    ${dom?'':`<div class="cats" id="idea-doms">${doms.map(x=>`<button data-dom="${esc(x)}" class="${x===d0?'on':''}">${esc(x)}</button>`).join('')}</div>`}
+    ${fs.length?`<select id="idea-folder" style="width:auto;margin-top:6px"><option value="">폴더 없음</option>${fs.map(f=>`<option ${dom&&S.folder===f?'selected':''}>${esc(f)}</option>`).join('')}</select>`:''}
+    <label class="chk-inline"><input type="checkbox" id="idea-analyze"> 브리핑으로 보내기 (다음 아침 Claude가 분석해 답변)</label>
+    <div class="form-row" style="margin-top:0"><button class="btn" id="idea-save" data-dom-fixed="${dom?esc(dom):''}">추가</button></div></section>`;
+}
 function viewManage(){
   const d=S.data;
   if (S.dom) return viewDomain(S.dom);
   const doms=domains();
-  let html = `<section class="card"><h2>새로 추가 (공부·아이디어·생각)</h2>
-    <textarea id="idea-in" style="min-height:64px" placeholder="적어 두면 메모로 저장되고, 다음 아침 브리핑에서 Claude가 분석·답변해 여기 아래에 붙여 줘요"></textarea>
-    <div class="cats" id="idea-doms">${doms.map((x,i)=>`<button data-dom="${esc(x)}" class="${i===0?'on':''}">${esc(x)}</button>`).join('')}</div>
-    <div class="form-row" style="margin-top:0"><button class="btn" id="idea-save">추가</button></div></section>
-    <div class="domgrid">`;
-  doms.forEach(x => { const es=domEntries(x);
+  let html = addBox(null) + `<div class="domgrid">`;
+  doms.forEach(x => { const es=domEntries(x), pins=es.filter(e=>e.o.mpin).length;
     html += `<button class="domcard" data-open-dom="${esc(x)}"><span class="nm">${esc(x)}</span><span class="n">${es.length}</span>
-      <span class="faint">${es.length?'최근 '+md(es[0].date):'아직 없음'}</span>${weekBars(es)}</button>`; });
+      <span class="faint">${es.length?'최근 '+md(es[0].date):'아직 없음'}${pins?` · 📌${pins}`:''}${foldersOf(x).length?` · 📁${foldersOf(x).length}`:''}</span>${weekBars(es)}</button>`; });
   html += `</div>`;
   const none = d.memos.filter(m=>!m.domain).length;
   if (none) html += `<div class="faint" style="margin:10px 2px">분류 안 된 메모 ${none}건은 다음 아침 브리핑 때 Claude가 나눠 넣어요.</div>`;
@@ -614,36 +647,63 @@ function answerBlock(it){
     <div class="tools"><button class="tbtn" data-toggle="${esc(k)}" data-state="${open?1:0}">💬 ${nc||''}</button></div>
     ${commentThread('item', it.id, it.comments, open)}</div>`;
 }
+function entryCard(e){
+  const o=e.o, type=e.kind, key=type+':'+o.id, ex=!!S.expand[key];
+  let inner;
+  if (type==='memo'){
+    const ans=answersFor(o.id);
+    inner = `<div class="mine-q"><div class="who">${o.status==='note'?'내 정리':'내 메모'} · ${md(o.day)}
+        ${o.status==='new'?' · <span class="chip new">다음 아침 분석</span>':''}${o.folder?` · 📁 ${esc(o.folder)}`:''}${o.mpin?' · 📌':''}${o.hidden?' · 숨김':''}</div>
+      <div class="memo-text">${linkify(o.text)}</div></div>
+      ${ans.length ? ans.map(answerBlock).join('') : (o.status==='new'?'<div class="ans"><div class="faint">다음 아침 브리핑에서 답변이 붙어요</div></div>':'')}`;
+  } else {
+    inner = answerBlock(o).replace('class="ans"','class="ans" style="border-radius:14px;padding-left:16px"');
+  }
+  return `<div class="pair ${o.hidden?'hid':''}"><div class="clampbox ${ex?'open':''}" data-cb="${esc(key)}">${inner}</div>
+    <div class="ebar"><button class="morebtn" data-expand="${esc(key)}">${ex?'접기 ▲':'더 보기 ▼'}</button><span class="sp"></span>
+      <button class="tbtn ${o.mpin?'on':''}" data-mpin="${type}|${esc(o.id)}|${o.mpin?0:1}">📌</button>
+      <button class="tbtn" data-emenu="${type}|${esc(o.id)}">⋯</button></div></div>`;
+}
+const shiftMonth = (ym, n) => { let [y,m]=ym.split('-').map(Number); m+=n; while(m<1){m+=12;y--;} while(m>12){m-=12;y++;} return `${y}-${String(m).padStart(2,'0')}`; };
 function viewDomain(dom){
-  const all=domEntries(dom);
-  const months=[...new Set(all.map(e=>String(e.date).slice(0,7)))].sort().reverse();
-  const cur = S.month && (months.includes(S.month) || !months.length) ? S.month : (months[0] || S.data.today.slice(0,7));
-  S.month = cur;
-  const [cy,cm]=cur.split('-').map(Number);
-  const es = all.filter(e=>String(e.date).slice(0,7)===cur);
-  let html = `<div class="tools" style="margin:0 0 6px"><button class="tbtn" id="dom-back">‹ 카테고리</button><b style="font-size:18px;margin-left:4px">${esc(dom)}</b>
-    <span class="faint" style="margin-left:auto">전체 ${all.length}건</span></div>
-    <div class="monthnav"><button class="tbtn" data-month="-1" aria-label="이전 달">‹</button><b>${cy}년 ${cm}월</b><button class="tbtn" data-month="1" aria-label="다음 달">›</button></div>
-    <section class="card"><h2>${esc(dom)}에 새로 추가</h2><textarea id="idea-in" style="min-height:64px" placeholder="메모로 저장되고, 다음 아침 Claude가 분석해 이 아래에 답변을 붙여 줘요"></textarea>
-      <div class="form-row"><button class="btn" id="idea-save" data-dom-fixed="${esc(dom)}">추가</button></div></section>`;
-  if (!es.length) return html + `<div class="empty">${cy}년 ${cm}월 기록이 없어요${months.length?` · 기록 있는 달: ${months.map(x=>x.replace('-','.')).join(', ')}`:''}</div>`;
-  es.forEach(e => {
-    if (e.kind==='memo'){ const m=e.o, ans=answersFor(m.id), k='memo:'+m.id;
-      html += `<div class="pair"><div class="mine-q"><div class="who">내 메모 · ${md(m.day)} ${m.status==='new'?'· <span class="chip new">다음 브리핑에서 분석</span>':''}
-          <span style="float:right">${domSelect('memo', m.id, m.domain)}</span></div>
-        <div class="memo-text">${linkify(m.text)}</div></div>
-        ${ans.length ? ans.map(answerBlock).join('') : `<div class="ans"><div class="faint">${m.status==='new'?'다음 아침 브리핑에서 답변이 붙어요':'연결된 답변이 없어요'}</div></div>`}</div>`;
-    } else {
-      html += `<div class="pair">${answerBlock(e.o).replace('class="ans"','class="ans" style="border-radius:14px;padding-left:16px"')}</div>`;
-    }
-  });
+  const all=domEntries(dom, S.showHidden), fs=foldersOf(dom);
+  if (S.folder!=='*' && S.folder!=='' && !fs.includes(S.folder)) S.folder='*';
+  const inFolder = e => S.folder==='*' || (e.o.folder||'')===S.folder;
+  if (!S.month) S.month = S.data.today.slice(0,7);
+  const cur=S.month, [cy,cm]=cur.split('-').map(Number), prev=shiftMonth(cur,-1), next=shiftMonth(cur,1);
+  const pins = all.filter(e => e.o.mpin && inFolder(e));
+  const es = all.filter(e => !e.o.mpin && inFolder(e) && String(e.date).slice(0,7)===cur);
+  const months=[...new Set(domEntries(dom).map(e=>String(e.date).slice(0,7)))].sort().reverse();
+  const ty=+S.data.today.slice(0,4); let ys=''; for(let y=ty-3;y<=ty+1;y++) ys+=`<option value="${y}" ${y===cy?'selected':''}>${y}년</option>`;
+  let ms=''; for(let m=1;m<=12;m++) ms+=`<option value="${m}" ${m===cm?'selected':''}>${m}월</option>`;
+  const hiddenN = domEntries(dom, true).length - domEntries(dom).length;
+  let html = `<div class="tools" style="margin:0 0 10px"><button class="tbtn" id="dom-back">‹ 카테고리</button><b style="font-size:18px;margin-left:4px">${esc(dom)}</b>
+    <span class="faint" style="margin-left:auto">전체 ${domEntries(dom).length}건</span></div>` + addBox(dom) + `
+    <div class="jump"><span class="faint">📅 바로 가기</span><select id="jump-y">${ys}</select><select id="jump-m">${ms}</select>
+      ${months.length?`<span class="faint" style="margin-left:auto">기록 있는 달: ${months.slice(0,6).map(x=>`<button class="tbtn" data-goto-month="${x}">${+x.slice(5)}월</button>`).join(' ')}</span>`:''}</div>
+    <div class="monthnav"><button class="tbtn side" data-month="-1">‹ ${+prev.slice(5)}월</button><b>${cy}년 ${cm}월</b><button class="tbtn side" data-month="1">${+next.slice(5)}월 ›</button></div>
+    <div class="fchips"><button data-folder="*" class="${S.folder==='*'?'on':''}">전체</button>${fs.map(f=>`<button data-folder="${esc(f)}" class="${S.folder===f?'on':''}">📁 ${esc(f)}</button>`).join('')}
+      ${fs.length?`<button data-folder="" class="${S.folder===''?'on':''}">폴더 없음</button>`:''}<button id="folder-add">＋ 폴더</button>${fs.length?`<button id="folder-edit">${S.folderEdit?'완료':'폴더 편집'}</button>`:''}</div>`;
+  if (S.folderEdit && fs.length) html += `<section class="card">${fs.map(f=>`<div class="tabrow"><span class="nm">📁 ${esc(f)}</span>
+      <button class="tbtn" data-folder-ren="${esc(f)}">이름 변경</button><button class="tbtn danger" data-folder-del="${esc(f)}">삭제</button></div>`).join('')}
+      <div class="faint" style="margin-top:6px">폴더를 삭제해도 안의 기록은 지워지지 않고 "폴더 없음"으로 옮겨져요.</div></section>`;
+  if (pins.length) html += `<div class="pinhead">📌 고정 (${pins.length})</div>${pins.map(entryCard).join('')}`;
+  html += es.length ? es.map(entryCard).join('') : `<div class="empty">${cy}년 ${cm}월 기록이 없어요 · 좌우로 밀거나 ‹ › 로 달을 옮겨 보세요</div>`;
+  if (hiddenN) html += `<div class="form-row"><button class="btn ghost" id="toggle-hidden">${S.showHidden?'숨긴 항목 감추기':`숨긴 항목 ${hiddenN}건 보기`}</button></div>`;
   return html;
 }
 const TITLES={today:'브리핑',memo:'메모',plan:'일정·할 일',history:'기록',watch:'지표',manage:'관리'};
 const WIDE = window.matchMedia('(min-width:1000px)');
-function setBadge(id, n){ const e=$(id); e.textContent=n>99?'99+':String(n); e.classList.toggle('hidden', !n); }
+function setBadge(id, n){ const e=$(id); if(!e) return; e.textContent=n>99?'99+':String(n); e.classList.toggle('hidden', !n); }
+function renderNav(){
+  const t = S.data.tabs || {order:Object.keys(TAB_META), hidden:[]};
+  const vis = t.order.filter(x => TAB_META[x] && !(t.hidden||[]).includes(x));
+  if (!S.tabInit || !vis.includes(S.tab)) { S.tab = vis[0] || 'today'; S.tabInit = true; }
+  $('#nav').innerHTML = vis.map(x => `<button data-tab="${x}" class="${x===S.tab?'on':''}"><span class="i">${TAB_META[x][0]}</span>${TAB_META[x][1]}${x==='today'?'<span class="nb hidden" id="nb-today"></span>':x==='memo'?'<span class="nb hidden" id="nb-memo"></span>':''}</button>`).join('');
+}
 function render(){
   if(!S.data) return;
+  renderNav();
   setBadge('#nb-today', unseenList('item').length);
   setBadge('#nb-memo', unseenList('memo').length);
   $('#title').textContent=TITLES[S.tab];
@@ -652,6 +712,10 @@ function render(){
   const v={today:viewToday,memo:viewMemo,plan:viewPlan,history:viewHistory,watch:viewWatch,manage:viewManage}[S.tab]();
   $('#view').innerHTML=v;
   if ($('#memo-in') && draft) $('#memo-in').value = draft;
+  // 짧은 카드는 접기/더 보기 없이 그대로
+  document.querySelectorAll('.clampbox').forEach(cb => {
+    if (cb.scrollHeight <= 310) { cb.classList.add('short'); const b=cb.parentNode.querySelector('.morebtn'); if (b) b.style.visibility='hidden'; }
+  });
   $('#chatbar').classList.toggle('hidden', S.tab!=='memo');
   document.body.classList.toggle('chat', S.tab==='memo');
   if (S.tab==='watch' && !S.quotesLoaded) loadQuotes();
@@ -671,6 +735,27 @@ function memoSheet(m){
     <div class="cats" id="m-doms" style="margin-top:4px"><button data-dom="" class="${!(m&&m.domain)?'on':''}">자동 분류</button>${domains().map(c=>`<button data-dom="${esc(c)}" class="${m&&m.domain===c?'on':''}">${esc(c)}</button>`).join('')}</div>
     <div class="form-row"><button class="btn ghost" id="m-cancel">취소</button><button class="btn" id="m-save" data-id="${m?esc(m.id):''}">저장</button></div>`);
   setTimeout(()=>$('#m-text').focus(),50);
+}
+function tabSheet(){
+  const t = S.tabDraft || JSON.parse(JSON.stringify(S.data.tabs || {order:Object.keys(TAB_META), hidden:[]}));
+  S.tabDraft = t;
+  openSheet(`<h3>탭 순서 · 숨기기</h3><div class="faint" style="margin-bottom:6px">맨 위 탭이 앱을 열 때 첫 화면이에요. 폰·PC에 똑같이 적용돼요.</div>
+    ${t.order.map((x,i)=>`<div class="tabrow"><span class="nm">${TAB_META[x][0]} ${TAB_META[x][1]}</span>
+      <button class="tbtn" data-tab-up="${i}" ${i===0?'disabled':''}>▲</button><button class="tbtn" data-tab-down="${i}" ${i===t.order.length-1?'disabled':''}>▼</button>
+      <label class="chk-inline" style="margin:0"><input type="checkbox" data-tab-hide="${x}" ${t.hidden.includes(x)?'checked':''}> 숨기기</label></div>`).join('')}
+    <div class="form-row"><button class="btn ghost" id="tab-cancel">취소</button><button class="btn" id="tab-save">저장</button></div>`);
+}
+function entrySheet(type, id){
+  const o = type==='item' ? S.data.items.find(i=>i.id===id) : S.data.memos.find(m=>m.id===id);
+  if (!o) return;
+  const fs=foldersOf(o.domain);
+  openSheet(`<h3>${type==='item'?'답변':'기록'} 관리</h3>
+    <div class="faint">카테고리</div><select id="em-dom" style="margin:4px 0 10px">${domains().map(x=>`<option ${x===o.domain?'selected':''}>${esc(x)}</option>`).join('')}</select>
+    <div class="faint">폴더</div><select id="em-folder" style="margin:4px 0 10px"><option value="">폴더 없음</option>${fs.map(f=>`<option ${f===o.folder?'selected':''}>${esc(f)}</option>`).join('')}</select>
+    <div class="form-row"><button class="btn" id="em-save" data-em="${type}|${esc(id)}">이동 저장</button></div>
+    <div class="form-row"><button class="btn ghost" data-em-hide="${type}|${esc(id)}|${o.hidden?0:1}">${o.hidden?'다시 보이기':'숨기기'}</button>
+      <button class="btn ghost" style="color:var(--up)" data-em-del="${type}|${esc(id)}">삭제</button></div>
+    <div class="form-row"><button class="btn ghost" id="m-cancel">닫기</button></div>`);
 }
 function schedSheet(s){
   openSheet(`<h3>일정 편집</h3><input id="e-title" value="${esc(s.title)}">
@@ -701,18 +786,37 @@ document.addEventListener('click', async e => {
   if (ds.seenDate){ const ids=unseenList('item').filter(i=>i.date===ds.seenDate).map(i=>i.id);
     if (!ids.length || !confirm(`${md(ds.seenDate)} 항목 ${ids.length}건을 모두 확인할까요?`)) return;
     await act('uiSetSeen', 'item', ids, true); toast('확인한 답변은 [기록]에 저장됐어요'); return; }
-  if (ds.openDom){ S.dom=ds.openDom; S.month=null; window.scrollTo(0,0); render(); return; }
+  if (ds.openDom){ S.dom=ds.openDom; S.month=null; S.folder='*'; S.folderEdit=false; S.showHidden=false; window.scrollTo(0,0); render(); return; }
   if (t.id==='dom-back'){ S.dom=null; render(); return; }
   if (t.id==='dom-edit'){ S.domEdit=true; render(); return; }
   if (t.id==='dom-done'){ S.domEdit=false; render(); return; }
   if (t.id==='dom-add'){ const v=$('#dom-new').value.trim(); if(!v) return; if(domains().includes(v)) return toast('이미 있어요'); await act('uiSaveDomains', domains().concat([v])); return; }
   if (ds.domDel!==undefined){ const list=domains().slice(), x=list[+ds.domDel];
     if (!confirm(`"${x}" 카테고리를 목록에서 뺄까요? (이미 분류된 기록은 남아 있어요)`)) return; list.splice(+ds.domDel,1); await act('uiSaveDomains', list); return; }
-  if (ds.dom!==undefined && t.closest('#idea-doms')){ t.parentNode.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b===t)); return; }
+  if (ds.dom!==undefined && t.closest('#idea-doms')){ S.addDom=ds.dom; const keep=$('#idea-in').value, an=$('#idea-analyze').checked; render(); $('#idea-in').value=keep; $('#idea-analyze').checked=an; return; }
   if (t.id==='idea-save'){ const v=$('#idea-in').value.trim(); if(!v) return toast('내용을 적어 주세요');
     const dom = ds.domFixed || (document.querySelector('#idea-doms .on')||{}).dataset.dom || '';
-    await act('uiAddMemo', v, '', dom); toast(`${dom}에 추가 → 메모로 저장, 다음 아침 분석`); return; }
-  if (ds.month!==undefined){ let [y,m]=S.month.split('-').map(Number); m+=+ds.month; if(m<1){m=12;y--;} if(m>12){m=1;y++;} S.month=`${y}-${String(m).padStart(2,'0')}`; render(); return; }
+    const an = $('#idea-analyze').checked, fo = $('#idea-folder') ? $('#idea-folder').value : '';
+    await act('uiAddMemo', v, '', dom, an, fo); toast(an ? `${dom}에 추가 · 다음 아침 Claude가 분석해요` : `${dom}에 저장했어요`); return; }
+  if (ds.month!==undefined){ S.month=shiftMonth(S.month, +ds.month); render(); return; }
+  if (ds.gotoMonth){ S.month=ds.gotoMonth; render(); return; }
+  if (ds.folder!==undefined){ S.folder=ds.folder; render(); return; }
+  if (t.id==='folder-add'){ const v=(prompt('새 폴더 이름')||'').trim(); if(!v) return; if(foldersOf(S.dom).includes(v)) return toast('이미 있어요');
+    await act('uiSaveFolders', S.dom, foldersOf(S.dom).concat([v])); S.folder=v; render(); return; }
+  if (t.id==='folder-edit'){ S.folderEdit=!S.folderEdit; render(); return; }
+  if (ds.folderRen){ const v=(prompt('새 이름', ds.folderRen)||'').trim(); if(!v||v===ds.folderRen) return; await act('uiRenameFolder', S.dom, ds.folderRen, v); if(S.folder===ds.folderRen) S.folder=v; render(); return; }
+  if (ds.folderDel){ if(!confirm(`"${ds.folderDel}" 폴더를 삭제할까요? (안의 기록은 "폴더 없음"으로 옮겨져요)`)) return; await act('uiDeleteFolder', S.dom, ds.folderDel); return; }
+  if (t.id==='toggle-hidden'){ S.showHidden=!S.showHidden; render(); return; }
+  if (ds.expand){ S.expand[ds.expand]=!S.expand[ds.expand]; render(); return; }
+  if (ds.mpin){ const [ty,id,v]=ds.mpin.split('|'); await act('uiSetEntry', ty, id, {mpin: v==='1'}); toast(v==='1'?'맨 위에 고정했어요':'고정을 풀었어요'); return; }
+  if (ds.emenu){ const [ty,id]=ds.emenu.split('|'); entrySheet(ty,id); return; }
+  if (t.id==='em-save'){ const [ty,id]=ds.em.split('|'); const p={domain:$('#em-dom').value, folder:$('#em-folder').value}; closeSheet(); await act('uiSetEntry', ty, id, p); return; }
+  if (ds.emHide){ const [ty,id,v]=ds.emHide.split('|'); closeSheet(); await act('uiSetEntry', ty, id, {hidden: v==='1'}); toast(v==='1'?'숨겼어요 (아래 "숨긴 항목 보기"에서 복구)':'다시 보이게 했어요'); return; }
+  if (ds.emDel){ const [ty,id]=ds.emDel.split('|'); if(!confirm('완전히 삭제할까요? 되돌릴 수 없어요.')) return; closeSheet(); await act(ty==='item'?'uiDeleteItem':'uiDeleteMemo', id); return; }
+  if (t.id==='settings'){ S.tabDraft=null; tabSheet(); return; }
+  if (ds.tabUp!==undefined||ds.tabDown!==undefined){ const o=S.tabDraft.order, i=+(ds.tabUp!==undefined?ds.tabUp:ds.tabDown), j=ds.tabUp!==undefined?i-1:i+1; [o[i],o[j]]=[o[j],o[i]]; tabSheet(); return; }
+  if (t.id==='tab-cancel'){ S.tabDraft=null; closeSheet(); return; }
+  if (t.id==='tab-save'){ const cfg=S.tabDraft; if(cfg.hidden.length>=cfg.order.length) return toast('탭이 하나는 보여야 해요'); closeSheet(); S.tabDraft=null; S.tabInit=false; await act('uiSaveTabs', cfg); return; }
   if (ds.hseg){ S.histSeg=ds.hseg; render(); return; }
   if (t.id==='memo-send'){ sendChat($('#memo-in')); return; }
   if (ds.seen){ const [ty,id,v]=ds.seen.split('|'); await act('uiSetSeen', ty, [id], v==='1');
@@ -769,8 +873,18 @@ document.addEventListener('change', e => {
   if (ds.wlOn!==undefined){ wlItems()[+ds.wlOn].enabled = t.checked; wlChanged(); }
   if (t.id==='wl-cat'){ S.cat=t.value; render(); }
   if (ds.setDom){ const [ty,id]=ds.setDom.split('|'); act('uiSetDomain', ty, id, t.value); }
+  if (ds.setFolder){ const [ty,id]=ds.setFolder.split('|'); act('uiSetEntry', ty, id, {folder:t.value}); }
+  if (ds.tabHide){ const h=S.tabDraft.hidden, x=ds.tabHide; if (t.checked){ if(!h.includes(x)) h.push(x); } else S.tabDraft.hidden=h.filter(y=>y!==x); }
+  if (t.id==='jump-y' || t.id==='jump-m'){ S.month = `${$('#jump-y').value}-${String($('#jump-m').value).padStart(2,'0')}`; render(); }
   if (t.id==='cal-y' || t.id==='cal-m'){ S.cal={y:+$('#cal-y').value, m:+$('#cal-m').value}; render(); }
 });
+let _sx=null, _sy=null;
+document.addEventListener('touchstart', e => { const t=e.target; if (t.closest('textarea,input,select,.sheet')) { _sx=null; return; } _sx=e.touches[0].clientX; _sy=e.touches[0].clientY; }, {passive:true});
+document.addEventListener('touchend', e => {
+  if (_sx===null || S.tab!=='manage' || !S.dom) return;
+  const dx=e.changedTouches[0].clientX-_sx, dy=e.changedTouches[0].clientY-_sy; _sx=null;
+  if (Math.abs(dx)>70 && Math.abs(dy)<50){ S.month=shiftMonth(S.month, dx<0?1:-1); render(); toast(`${+S.month.slice(5)}월`); }
+}, {passive:true});
 document.addEventListener('toggle', e => { if (e.target.classList && e.target.classList.contains('daily')) S.dailyOpen = e.target.open; }, true);
 document.addEventListener('input', e => {
   const t=e.target, ds=t.dataset;
