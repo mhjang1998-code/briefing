@@ -171,6 +171,16 @@ nav .nb{position:absolute;top:0;left:50%;margin-left:6px;background:var(--up);co
 .month{font-size:13px;font-weight:700;color:var(--sub);margin:16px 0 8px}
 .clampbox{position:relative;max-height:300px;overflow:hidden}
 .clampbox.open{max-height:none}
+.pair{position:relative}
+.drag{position:absolute;left:-2px;top:0;bottom:40px;width:16px;cursor:grab;touch-action:none;z-index:3;border-radius:14px 0 0 14px}
+.drag:hover{background:rgba(127,127,127,.12)}
+.pair.dragging{opacity:.9;transform:scale(1.01);z-index:20}
+.pair.dragging .mine-q,.pair.dragging .ans{box-shadow:0 10px 28px rgba(0,0,0,.18)}
+.linklist{max-height:46vh;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:4px 10px;margin:6px 0}
+.linkrow{display:flex;gap:8px;align-items:flex-start;padding:7px 0;border-top:1px solid var(--line);font-size:14px}
+.linkrow:first-child{border-top:0}
+.linkrow input{width:18px;height:18px;margin-top:2px;flex:none}
+.linkrow .meta{font-size:12px;color:var(--faint)}
 .clampbox.short{max-height:none}
 .clampbox.short::after{display:none}
 .pair .mine-q:last-child{border-radius:14px}
@@ -384,7 +394,8 @@ function itemCard(it, mode){
       <span class="faint" style="margin-left:auto">관리</span>${domSelect('item', it.id, it.domain)}${folderSelect('item', it.id, it.domain, it.folder)}
       ${it.hasNewComment?'<span class="chip new">답변 대기</span>':''}</div>
     ${it.title?`<div class="ititle">${esc(it.title)}</div>`:''}${body}
-    <div class="tools">${btn}<button class="tbtn" data-toggle="${esc(k)}" data-state="${open?1:0}">💬 코멘트 ${nc||''}</button></div>
+    <div class="tools">${btn}<button class="tbtn" data-toggle="${esc(k)}" data-state="${open?1:0}">💬 코멘트 ${nc||''}</button>
+      <span class="faint" style="margin-left:auto">${memoIdsOf(it).length?`🔗 메모 ${memoIdsOf(it).length}`:''}</span><button class="tbtn" data-emenu="item|${esc(it.id)}">⋯</button></div>
     ${commentThread('item', it.id, it.comments, open)}</section>`;
 }
 function indicatorsCard(){
@@ -640,13 +651,15 @@ function viewManage(){
       :`<div class="tools">${doms.map(x=>`<span class="chip">${esc(x)}</span>`).join('')}<button class="tbtn" id="dom-edit">편집</button></div>`}</section>`;
   return html;
 }
-function answerBlock(it){
+function answerBlock(it, memoId){
   const k='item:'+it.id, open=threadOpen(k,false), nc=(it.comments||[]).length, seen=isSeen(it,'item');
   return `<div class="ans"><div class="who">Claude 답변 · ${md(it.date)} · ${esc(it.section||'')}${seen?'':' · <span class="chip unseen">브리핑에 있음</span>'}</div>
     ${it.title?`<div class="ititle">${esc(it.title)}</div>`:''}${it.section==='관심 지표'?renderIndicators(it.body):renderLines(it.body)}
-    <div class="tools"><button class="tbtn" data-toggle="${esc(k)}" data-state="${open?1:0}">💬 ${nc||''}</button></div>
+    <div class="tools"><button class="tbtn" data-toggle="${esc(k)}" data-state="${open?1:0}">💬 ${nc||''}</button>
+      ${memoId?`<button class="tbtn" data-unlink="${esc(it.id)}|${esc(memoId)}">떼기</button>`:`<button class="tbtn" data-emenu="item|${esc(it.id)}">⋯</button>`}</div>
     ${commentThread('item', it.id, it.comments, open)}</div>`;
 }
+const sortKey = e => { const v=e.o.sort; return (v!=='' && v!=null && !isNaN(+v)) ? +v : -ts(e.at||e.date)/1000; };
 function entryCard(e){
   const o=e.o, type=e.kind, key=type+':'+o.id, ex=!!S.expand[key];
   let inner;
@@ -655,11 +668,11 @@ function entryCard(e){
     inner = `<div class="mine-q"><div class="who">${o.status==='note'?'내 정리':'내 메모'} · ${md(o.day)}
         ${o.status==='new'?' · <span class="chip new">다음 아침 분석</span>':''}${o.folder?` · 📁 ${esc(o.folder)}`:''}${o.mpin?' · 📌':''}${o.hidden?' · 숨김':''}</div>
       <div class="memo-text">${linkify(o.text)}</div></div>
-      ${ans.length ? ans.map(answerBlock).join('') : (o.status==='new'?'<div class="ans"><div class="faint">다음 아침 브리핑에서 답변이 붙어요</div></div>':'')}`;
+      ${ans.length ? ans.map(a => answerBlock(a, o.id)).join('') : (o.status==='new'?'<div class="ans"><div class="faint">다음 아침 브리핑에서 답변이 붙어요</div></div>':'')}`;
   } else {
     inner = answerBlock(o).replace('class="ans"','class="ans" style="border-radius:14px;padding-left:16px"');
   }
-  return `<div class="pair ${o.hidden?'hid':''}"><div class="clampbox ${ex?'open':''}" data-cb="${esc(key)}">${inner}</div>
+  return `<div class="pair ${o.hidden?'hid':''}" data-key="${type}|${esc(o.id)}" data-sk="${sortKey(e)}"><div class="drag" title="끌어서 순서 바꾸기"></div><div class="clampbox ${ex?'open':''}" data-cb="${esc(key)}">${inner}</div>
     <div class="ebar"><button class="morebtn" data-expand="${esc(key)}">${ex?'접기 ▲':'더 보기 ▼'}</button><span class="sp"></span>
       <button class="tbtn ${o.mpin?'on':''}" data-mpin="${type}|${esc(o.id)}|${o.mpin?0:1}">📌</button>
       <button class="tbtn" data-emenu="${type}|${esc(o.id)}">⋯</button></div></div>`;
@@ -669,11 +682,14 @@ function viewDomain(dom){
   const all=domEntries(dom, S.showHidden), fs=foldersOf(dom);
   if (S.folder!=='*' && S.folder!=='' && !fs.includes(S.folder)) S.folder='*';
   const inFolder = e => S.folder==='*' || (e.o.folder||'')===S.folder;
-  if (!S.month) S.month = S.data.today.slice(0,7);
-  const cur=S.month, [cy,cm]=cur.split('-').map(Number), prev=shiftMonth(cur,-1), next=shiftMonth(cur,1);
-  const pins = all.filter(e => e.o.mpin && inFolder(e));
-  const es = all.filter(e => !e.o.mpin && inFolder(e) && String(e.date).slice(0,7)===cur);
   const months=[...new Set(domEntries(dom).map(e=>String(e.date).slice(0,7)))].sort().reverse();
+  if (!S.month) S.month = months[0] || S.data.today.slice(0,7);      // 기록 있는 가장 최근 달
+  const isAll = S.month==='all', base = isAll ? (S.lastMonth || months[0] || S.data.today.slice(0,7)) : S.month;
+  if (!isAll) S.lastMonth = S.month;
+  const cur=base, [cy,cm]=cur.split('-').map(Number), prev=shiftMonth(cur,-1), next=shiftMonth(cur,1);
+  const bySort = (a,b) => sortKey(a)-sortKey(b);
+  const pins = all.filter(e => e.o.mpin && inFolder(e)).sort(bySort);
+  const es = all.filter(e => !e.o.mpin && inFolder(e) && (isAll || String(e.date).slice(0,7)===cur)).sort(bySort);
   const ty=+S.data.today.slice(0,4); let ys=''; for(let y=ty-3;y<=ty+1;y++) ys+=`<option value="${y}" ${y===cy?'selected':''}>${y}년</option>`;
   let ms=''; for(let m=1;m<=12;m++) ms+=`<option value="${m}" ${m===cm?'selected':''}>${m}월</option>`;
   const hiddenN = domEntries(dom, true).length - domEntries(dom).length;
@@ -681,14 +697,16 @@ function viewDomain(dom){
     <span class="faint" style="margin-left:auto">전체 ${domEntries(dom).length}건</span></div>` + addBox(dom) + `
     <div class="jump"><span class="faint">📅 바로 가기</span><select id="jump-y">${ys}</select><select id="jump-m">${ms}</select>
       ${months.length?`<span class="faint" style="margin-left:auto">기록 있는 달: ${months.slice(0,6).map(x=>`<button class="tbtn" data-goto-month="${x}">${+x.slice(5)}월</button>`).join(' ')}</span>`:''}</div>
-    <div class="monthnav"><button class="tbtn side" data-month="-1">‹ ${+prev.slice(5)}월</button><b>${cy}년 ${cm}월</b><button class="tbtn side" data-month="1">${+next.slice(5)}월 ›</button></div>
+    <div class="monthnav"><button class="tbtn side" data-month="-1">‹ ${+prev.slice(5)}월</button><b>${isAll?'전체 기간':`${cy}년 ${cm}월`}</b><button class="tbtn side" data-month="1">${+next.slice(5)}월 ›</button>
+      <button class="tbtn ${isAll?'on':''}" data-month-all>${isAll?'월별로 보기':'전체'}</button></div>
     <div class="fchips"><button data-folder="*" class="${S.folder==='*'?'on':''}">전체</button>${fs.map(f=>`<button data-folder="${esc(f)}" class="${S.folder===f?'on':''}">📁 ${esc(f)}</button>`).join('')}
       ${fs.length?`<button data-folder="" class="${S.folder===''?'on':''}">폴더 없음</button>`:''}<button id="folder-add">＋ 폴더</button>${fs.length?`<button id="folder-edit">${S.folderEdit?'완료':'폴더 편집'}</button>`:''}</div>`;
   if (S.folderEdit && fs.length) html += `<section class="card">${fs.map(f=>`<div class="tabrow"><span class="nm">📁 ${esc(f)}</span>
       <button class="tbtn" data-folder-ren="${esc(f)}">이름 변경</button><button class="tbtn danger" data-folder-del="${esc(f)}">삭제</button></div>`).join('')}
       <div class="faint" style="margin-top:6px">폴더를 삭제해도 안의 기록은 지워지지 않고 "폴더 없음"으로 옮겨져요.</div></section>`;
-  if (pins.length) html += `<div class="pinhead">📌 고정 (${pins.length})</div>${pins.map(entryCard).join('')}`;
-  html += es.length ? es.map(entryCard).join('') : `<div class="empty">${cy}년 ${cm}월 기록이 없어요 · 좌우로 밀거나 ‹ › 로 달을 옮겨 보세요</div>`;
+  if (pins.length) html += `<div class="pinhead">📌 고정 (${pins.length})</div><div class="elist">${pins.map(entryCard).join('')}</div>`;
+  html += es.length ? `<div class="elist">${es.map(entryCard).join('')}</div><div class="faint" style="margin:4px 2px 12px">카드 왼쪽 색 막대를 잡고 끌면 순서를 바꿀 수 있어요</div>`
+    : `<div class="empty">${isAll?'기록이 없어요':`${cy}년 ${cm}월 기록이 없어요 · 좌우로 밀거나 ‹ › 로 달을 옮겨 보세요`}</div>`;
   if (hiddenN) html += `<div class="form-row"><button class="btn ghost" id="toggle-hidden">${S.showHidden?'숨긴 항목 감추기':`숨긴 항목 ${hiddenN}건 보기`}</button></div>`;
   return html;
 }
@@ -749,13 +767,32 @@ function entrySheet(type, id){
   const o = type==='item' ? S.data.items.find(i=>i.id===id) : S.data.memos.find(m=>m.id===id);
   if (!o) return;
   const fs=foldersOf(o.domain);
+  let link='';
+  if (type==='item'){
+    const cur=new Set(memoIdsOf(o));
+    const ms=S.data.memos.slice().sort((a,b)=>(b.domain===o.domain)-(a.domain===o.domain)||String(b.day).localeCompare(String(a.day)));
+    link = `<div class="faint" style="margin-top:6px">메모에 붙이기 (여러 개 선택 가능)</div>
+      <input id="link-q" placeholder="메모 검색" style="margin-top:4px">
+      <div class="linklist">${ms.map(m=>`<label class="linkrow" data-txt="${esc((m.text+' '+(m.domain||'')).toLowerCase())}"><input type="checkbox" data-link-m="${esc(m.id)}" ${cur.has(m.id)?'checked':''}>
+        <span><span class="meta">${md(m.day)}${m.domain?' · '+esc(m.domain):''}</span><br>${esc(String(m.text).slice(0,90))}</span></label>`).join('')}</div>
+      <div class="form-row" style="margin-top:0"><button class="btn" id="link-save-item" data-id="${esc(id)}">연결 저장</button></div>`;
+  } else {
+    const its=(S.data.items||[]).slice().sort((a,b)=>String(b.date).localeCompare(String(a.date)));
+    link = `<div class="faint" style="margin-top:6px">답변 붙이기 (여러 개 선택 가능)</div>
+      <input id="link-q" placeholder="답변 검색 (제목·내용)" style="margin-top:4px">
+      <div class="linklist">${its.map(i=>`<label class="linkrow" data-txt="${esc((i.title+' '+i.body+' '+(i.section||'')).toLowerCase())}"><input type="checkbox" data-link-i="${esc(i.id)}" ${memoIdsOf(i).includes(id)?'checked':''}>
+        <span><span class="meta">${md(i.date)} · ${esc(i.section||'')}${i.domain?' · '+esc(i.domain):''}</span><br><b>${esc(i.title||'(제목 없음)')}</b> ${esc(String(i.body).replace(/[•▸↳]/g,'').slice(0,60))}</span></label>`).join('') || '<div class="faint">아직 답변 카드가 없어요</div>'}</div>
+      <div class="form-row" style="margin-top:0"><button class="btn" id="link-save-memo" data-id="${esc(id)}">연결 저장</button></div>`;
+  }
   openSheet(`<h3>${type==='item'?'답변':'기록'} 관리</h3>
-    <div class="faint">카테고리</div><select id="em-dom" style="margin:4px 0 10px">${domains().map(x=>`<option ${x===o.domain?'selected':''}>${esc(x)}</option>`).join('')}</select>
-    <div class="faint">폴더</div><select id="em-folder" style="margin:4px 0 10px"><option value="">폴더 없음</option>${fs.map(f=>`<option ${f===o.folder?'selected':''}>${esc(f)}</option>`).join('')}</select>
-    <div class="form-row"><button class="btn" id="em-save" data-em="${type}|${esc(id)}">이동 저장</button></div>
+    <div class="faint">카테고리 · 폴더</div>
+    <div class="form-row" style="margin-top:4px"><select id="em-dom">${domains().map(x=>`<option ${x===o.domain?'selected':''}>${esc(x)}</option>`).join('')}</select>
+      <select id="em-folder"><option value="">폴더 없음</option>${fs.map(f=>`<option ${f===o.folder?'selected':''}>${esc(f)}</option>`).join('')}</select>
+      <button class="btn" style="flex:none" id="em-save" data-em="${type}|${esc(id)}">이동</button></div>
+    ${link}
     <div class="form-row"><button class="btn ghost" data-em-hide="${type}|${esc(id)}|${o.hidden?0:1}">${o.hidden?'다시 보이기':'숨기기'}</button>
-      <button class="btn ghost" style="color:var(--up)" data-em-del="${type}|${esc(id)}">삭제</button></div>
-    <div class="form-row"><button class="btn ghost" id="m-cancel">닫기</button></div>`);
+      <button class="btn ghost" style="color:var(--up)" data-em-del="${type}|${esc(id)}">삭제</button><button class="btn ghost" id="m-cancel">닫기</button></div>`);
+  $('#sheet').style.maxHeight='92vh'; $('#sheet').style.overflow='auto';
 }
 function schedSheet(s){
   openSheet(`<h3>일정 편집</h3><input id="e-title" value="${esc(s.title)}">
@@ -798,7 +835,18 @@ document.addEventListener('click', async e => {
     const dom = ds.domFixed || (document.querySelector('#idea-doms .on')||{}).dataset.dom || '';
     const an = $('#idea-analyze').checked, fo = $('#idea-folder') ? $('#idea-folder').value : '';
     await act('uiAddMemo', v, '', dom, an, fo); toast(an ? `${dom}에 추가 · 다음 아침 Claude가 분석해요` : `${dom}에 저장했어요`); return; }
-  if (ds.month!==undefined){ S.month=shiftMonth(S.month, +ds.month); render(); return; }
+  if (ds.monthAll!==undefined){ S.month = S.month==='all' ? (S.lastMonth||S.data.today.slice(0,7)) : 'all'; render(); return; }
+  if (ds.month!==undefined){ const b = S.month==='all' ? (S.lastMonth||S.data.today.slice(0,7)) : S.month; S.month=shiftMonth(b, +ds.month); render(); return; }
+  if (ds.unlink){ const [iid,mid]=ds.unlink.split('|'); const it=S.data.items.find(x=>x.id===iid); if(!it) return;
+    if(!confirm('이 답변을 메모에서 뗄까요? (답변은 기록에 남아요)')) return;
+    await act('uiSetEntry','item',iid,{memoIds: memoIdsOf(it).filter(x=>x!==mid)}); return; }
+  if (t.id==='link-save-item'){ const ids=[...document.querySelectorAll('[data-link-m]:checked')].map(x=>x.dataset.linkM); closeSheet();
+    await act('uiSetEntry','item',ds.id,{memoIds:ids}); toast(ids.length?`메모 ${ids.length}개에 붙였어요`:'연결을 모두 뗐어요'); return; }
+  if (t.id==='link-save-memo'){ const mid=ds.id, want=new Set([...document.querySelectorAll('[data-link-i]:checked')].map(x=>x.dataset.linkI));
+    const list=[]; (S.data.items||[]).forEach(i=>{ const cur=memoIdsOf(i), has=cur.includes(mid);
+      if (want.has(i.id) && !has) list.push({type:'item',id:i.id,patch:{memoIds:cur.concat([mid])}});
+      if (!want.has(i.id) && has) list.push({type:'item',id:i.id,patch:{memoIds:cur.filter(x=>x!==mid)}}); });
+    closeSheet(); if (list.length) { await act('uiSetEntries', list); toast('답변 연결을 저장했어요'); } return; }
   if (ds.gotoMonth){ S.month=ds.gotoMonth; render(); return; }
   if (ds.folder!==undefined){ S.folder=ds.folder; render(); return; }
   if (t.id==='folder-add'){ const v=(prompt('새 폴더 이름')||'').trim(); if(!v) return; if(foldersOf(S.dom).includes(v)) return toast('이미 있어요');
@@ -875,14 +923,40 @@ document.addEventListener('change', e => {
   if (ds.setDom){ const [ty,id]=ds.setDom.split('|'); act('uiSetDomain', ty, id, t.value); }
   if (ds.setFolder){ const [ty,id]=ds.setFolder.split('|'); act('uiSetEntry', ty, id, {folder:t.value}); }
   if (ds.tabHide){ const h=S.tabDraft.hidden, x=ds.tabHide; if (t.checked){ if(!h.includes(x)) h.push(x); } else S.tabDraft.hidden=h.filter(y=>y!==x); }
+  if (t.id==='link-q'){}
   if (t.id==='jump-y' || t.id==='jump-m'){ S.month = `${$('#jump-y').value}-${String($('#jump-m').value).padStart(2,'0')}`; render(); }
   if (t.id==='cal-y' || t.id==='cal-m'){ S.cal={y:+$('#cal-y').value, m:+$('#cal-m').value}; render(); }
 });
+/* 카드 왼쪽 색 막대를 잡고 끌어 순서 바꾸기 (마우스·터치 공통). 놓으면 앞뒤 카드 사이 값으로 저장 */
+let DR=null;
+document.addEventListener('pointerdown', e => {
+  const h=e.target.closest('.drag'); if(!h) return;
+  const pair=h.closest('.pair'); e.preventDefault();
+  DR={pair, list:pair.parentNode, moved:false}; pair.classList.add('dragging');
+  try { h.setPointerCapture(e.pointerId); } catch(_){}
+});
+document.addEventListener('pointermove', e => {
+  if(!DR) return; const y=e.clientY; DR.moved=true;
+  const sibs=[...DR.list.children].filter(p=>p.classList.contains('pair') && p!==DR.pair);
+  let before=null; for (const p of sibs){ const r=p.getBoundingClientRect(); if (y < r.top + r.height/2){ before=p; break; } }
+  if (before !== DR.pair.nextSibling) DR.list.insertBefore(DR.pair, before);
+  if (y < 70) window.scrollBy(0,-14); else if (y > innerHeight-90) window.scrollBy(0,14);
+});
+async function endDrag(){
+  if(!DR) return; const {pair,list,moved}=DR; DR=null; pair.classList.remove('dragging'); if(!moved) return;
+  const arr=[...list.children].filter(p=>p.classList.contains('pair')), i=arr.indexOf(pair), k=x=>+x.dataset.sk;
+  const prev=arr[i-1], next=arr[i+1]; let v;
+  if (prev && next) v=(k(prev)+k(next))/2; else if (prev) v=k(prev)+1000; else if (next) v=k(next)-1000; else return;
+  if (v===k(pair)) return;
+  const [ty,id]=pair.dataset.key.split('|'); await act('uiSetEntry', ty, id, {sort:v}); toast('순서를 바꿨어요');
+}
+document.addEventListener('pointerup', endDrag); document.addEventListener('pointercancel', endDrag);
 let _sx=null, _sy=null;
 document.addEventListener('touchstart', e => { const t=e.target; if (t.closest('textarea,input,select,.sheet')) { _sx=null; return; } _sx=e.touches[0].clientX; _sy=e.touches[0].clientY; }, {passive:true});
 document.addEventListener('touchend', e => {
   if (_sx===null || S.tab!=='manage' || !S.dom) return;
   const dx=e.changedTouches[0].clientX-_sx, dy=e.changedTouches[0].clientY-_sy; _sx=null;
+  if (DR || S.month==='all') return;
   if (Math.abs(dx)>70 && Math.abs(dy)<50){ S.month=shiftMonth(S.month, dx<0?1:-1); render(); toast(`${+S.month.slice(5)}월`); }
 }, {passive:true});
 document.addEventListener('toggle', e => { if (e.target.classList && e.target.classList.contains('daily')) S.dailyOpen = e.target.open; }, true);
@@ -891,6 +965,7 @@ document.addEventListener('input', e => {
   if (ds.wlPrompt!==undefined){ wlItems()[+ds.wlPrompt].prompt = t.value; S.wlDirty=true; const b=$('#wl-save'); if(b){b.disabled=false;b.textContent='변경 내용 저장';} }
   if (t.id==='wl-prompt'){ S.wlPromptDraft=t.value; S.wlDirty=true; const b=$('#wl-save'); if(b){b.disabled=false;b.textContent='변경 내용 저장';} }
   if (t.id==='wl-q'){ S.q=t.value; }
+  if (t.id==='link-q'){ const q=t.value.trim().toLowerCase(); document.querySelectorAll('.linkrow').forEach(r=>{ r.style.display = !q || r.dataset.txt.includes(q) ? '' : 'none'; }); }
 });
 async function sendChat(el){
   el = el && el.tagName ? el : $('#chat-in');

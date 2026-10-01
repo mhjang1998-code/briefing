@@ -23,11 +23,11 @@ const SCHEMA = {
   memos: { sheet: '메모', key: 'id', bools: ['pinned', 'mpin', 'hidden'], cols: [
     ['id', 'id'], ['day', '날짜'], ['text', '내용'], ['status', '상태'], ['category', '카테고리'],
     ['pinned', '고정'], ['createdAt', '작성시각'], ['updatedAt', '수정시각'], ['sentAt', '처리시각'], ['source', '출처'],
-    ['seenAt', '확인시각'], ['domain', '관리'], ['folder', '폴더'], ['mpin', '관리고정'], ['hidden', '숨김']] },
+    ['seenAt', '확인시각'], ['domain', '관리'], ['folder', '폴더'], ['mpin', '관리고정'], ['hidden', '숨김'], ['sort', '관리순서']] },
   items: { sheet: '항목', key: 'id', bools: ['pinned', 'mpin', 'hidden'], cols: [
     ['id', 'id'], ['date', '날짜'], ['section', '섹션'], ['title', '제목'], ['body', '내용'], ['domain', '관리'],
     ['createdAt', '작성시각'], ['seenAt', '확인시각'], ['pinned', '고정'], ['memoIds', '메모id'],
-    ['folder', '폴더'], ['mpin', '관리고정'], ['hidden', '숨김']] },
+    ['folder', '폴더'], ['mpin', '관리고정'], ['hidden', '숨김'], ['sort', '관리순서']] },
   comments: { sheet: '댓글', key: 'id', bools: ['seen'], cols: [
     ['id', 'id'], ['targetType', '대상'], ['targetId', '대상id'], ['by', '작성자'], ['text', '내용'],
     ['createdAt', '작성시각'], ['seen', '확인']] },
@@ -46,7 +46,14 @@ const SCHEMA = {
 const CATEGORIES = ['일정', '할 일', '분석', '결정', '생각', '기타'];
 const DEFAULT_DOMAINS = ['금융', '부동산', '인사이트', '전공', '사업', '기타'];
 const TABS = ['today', 'memo', 'plan', 'history', 'watch', 'manage'];
-const SCHEMA_VERSION = 'v4';
+const SCHEMA_VERSION = 'v5';
+// 화면에서 직접 고칠 수 있는 칸 (앞으로 화면 기능을 늘려도 서버를 다시 붙여넣지 않도록 넓게 둔다)
+const EDITABLE = {
+  memos: ['text', 'day', 'category', 'domain', 'folder', 'mpin', 'hidden', 'sort', 'pinned', 'seenAt', 'status'],
+  items: ['section', 'title', 'body', 'domain', 'folder', 'mpin', 'hidden', 'sort', 'pinned', 'seenAt', 'memoIds', 'date'],
+  schedules: ['title', 'date', 'time', 'done', 'note'],
+  todos: ['text', 'done'],
+};
 
 /* 한 번의 실행 안에서 같은 시트를 여러 번 읽지 않도록 캐시 (쓰기 때마다 비움) */
 const RC_ = {}, HC_ = {};
@@ -532,11 +539,12 @@ function apiPush_(body) {
 function importData_(d) {
   const counts = {};
   const plan = [['memos', d.memos], ['comments', d.comments], ['schedules', d.schedules],
-    ['todos', d.todos], ['briefs', d.briefs], ['watchlist', d.watchlist]];
+    ['todos', d.todos], ['briefs', d.briefs], ['watchlist', d.watchlist], ['items', d.items]];
   plan.forEach(([name, rows]) => {
     if (!rows || !rows.length) return;
     const k = SCHEMA[name].key;
     const existing = {};
+    if (name === 'items') ensureSheet_('items');
     readAll_(name).forEach(o => { existing[String(o[k])] = o._row; });
     const fresh = [];
     rows.forEach(r => {
@@ -552,7 +560,7 @@ function importData_(d) {
 /* ───────────── 앱 화면용 함수 (google.script.run 또는 외부 앱의 POST action:"ui") ───────────── */
 
 const UI_FUNCS = { uiLoad, uiAddMemo, uiEditMemo, uiDeleteMemo, uiTogglePin, uiAddComment, uiDeleteComment,
-  uiSetSeen, uiSetDomain, uiSaveDomains, uiSetEntry, uiDeleteItem, uiSaveTabs, uiSaveFolders, uiRenameFolder, uiDeleteFolder, uiSaveSchedule, uiSetDone, uiDelete, uiAddTodo, uiSaveWatchlist, uiSearch, uiQuotes };
+  uiSetSeen, uiSetDomain, uiSaveDomains, uiSetEntry, uiSetEntries, uiDeleteItem, uiSaveTabs, uiSaveFolders, uiRenameFolder, uiDeleteFolder, uiSaveSchedule, uiSetDone, uiDelete, uiAddTodo, uiSaveWatchlist, uiSearch, uiQuotes };
 
 function uiDispatch_(body) {
   const fn = UI_FUNCS[body.fn];
@@ -672,14 +680,37 @@ function uiSetDomain(key, type, id, domain) {
 }
 
 /** 관리 화면용 필드 변경: type = "item" | "memo", patch 에서 domain/folder/mpin/hidden 만 받는다 */
+function cleanPatch_(name, patch) {
+  const p = {}, allow = EDITABLE[name] || [], bools = SCHEMA[name].bools;
+  Object.keys(patch || {}).forEach(f => {
+    if (allow.indexOf(f) < 0) return;
+    let v = patch[f];
+    if (bools.indexOf(f) >= 0 || f === 'done') v = !!v;
+    else if (f === 'domain') v = domains_().indexOf(v) >= 0 ? v : '';
+    else if (f === 'memoIds') v = (Array.isArray(v) ? v : String(v || '').split(',')).map(x => String(x).trim()).filter(Boolean)
+      .filter((x, i, a) => a.indexOf(x) === i).join(',');
+    else if (f === 'sort') v = (v === '' || v === null || v === undefined || isNaN(Number(v))) ? '' : Number(v);
+    else v = v === null || v === undefined ? '' : String(v);
+    p[f] = v;
+  });
+  return p;
+}
+const TYPE_SHEET = { item: 'items', memo: 'memos', schedule: 'schedules', todo: 'todos' };
+
 function uiSetEntry(key, type, id, patch) {
   checkKey_(key);
-  const name = type === 'item' ? 'items' : 'memos', p = {};
-  if (patch && patch.domain !== undefined) p.domain = domains_().indexOf(patch.domain) >= 0 ? patch.domain : '';
-  if (patch && patch.folder !== undefined) p.folder = String(patch.folder || '');
-  if (patch && patch.mpin !== undefined) p.mpin = !!patch.mpin;
-  if (patch && patch.hidden !== undefined) p.hidden = !!patch.hidden;
-  withLock_(() => { const o = findBy_(name, 'id', id); if (o) patchRow_(name, o._row, p); });
+  const name = TYPE_SHEET[type] || 'memos', p = cleanPatch_(name, patch);
+  withLock_(() => { const o = findBy_(name, 'id', id); if (o && Object.keys(p).length) patchRow_(name, o._row, p); });
+  return uiLoad(key);
+}
+
+/** 여러 개를 한 번에: list = [{type, id, patch}] (답변 붙이기·떼기, 순서 저장 등) */
+function uiSetEntries(key, list) {
+  checkKey_(key);
+  withLock_(() => (list || []).slice(0, 300).forEach(x => {
+    const name = TYPE_SHEET[x.type] || 'memos', p = cleanPatch_(name, x.patch);
+    const o = findBy_(name, 'id', x.id); if (o && Object.keys(p).length) patchRow_(name, o._row, p);
+  }));
   return uiLoad(key);
 }
 
