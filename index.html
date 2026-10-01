@@ -145,11 +145,36 @@ nav .nb{position:absolute;top:0;left:50%;margin-left:6px;background:var(--up);co
 .cell .dots{display:flex;gap:3px;height:14px;align-items:center}
 .cell .n{font-size:10px;line-height:1;background:var(--accent);color:#fff;border-radius:99px;padding:2px 5px}
 .cell .m{width:6px;height:6px;border-radius:50%;background:var(--warn)}
+#side{display:none}
+#side-in{min-height:84px}
+/* 노트북 등 넓은 화면: 왼쪽 메뉴 + [선택한 탭 | 메모] 2단. 폰 화면은 그대로 */
+@media (min-width:1000px){
+  body,body.chat{padding:0 0 24px 92px}
+  header{padding:14px 24px 10px;max-width:1440px;margin:0 auto}
+  nav{top:0;bottom:0;right:auto;width:84px;flex-direction:column;justify-content:flex-start;gap:6px;padding:72px 6px 12px;border-top:0;border-right:1px solid var(--line)}
+  nav button{flex:none;padding:10px 0;border-radius:12px;font-size:12px}
+  nav button.on{background:var(--accent-soft)}
+  nav button[data-tab=memo]{display:none}
+  nav .nb{top:4px}
+  .layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:24px;max-width:1440px;margin:0 auto;padding:0 24px;align-items:start}
+  main{max-width:none;margin:0;padding:0}
+  #side{display:block;position:sticky;top:64px;max-height:calc(100vh - 76px);overflow:auto;padding-bottom:16px}
+  #side .side-title{font-size:13px;font-weight:700;color:var(--sub);margin:0 2px 8px}
+  .chatbar{display:none!important}
+}
 </style>
 </head>
 <body>
 <header><h1 id="title">오늘</h1><button class="icon-btn" id="refresh" aria-label="새로고침">↻</button></header>
+<div class="layout">
 <main id="view"><div class="empty">불러오는 중…</div></main>
+<aside id="side" aria-label="메모">
+  <div class="side-title">📝 메모</div>
+  <section class="card"><textarea id="side-in" placeholder="떠오른 걸 적어 두세요 (Ctrl+Enter 저장)"></textarea>
+    <div class="form-row"><button class="btn" id="side-send">저장</button></div></section>
+  <div id="side-list"></div>
+</aside>
+</div>
 
 <nav id="nav">
   <button data-tab="today" class="on"><span class="i">☀️</span>오늘</button>
@@ -476,15 +501,18 @@ function viewWatch(){
 function wlChanged(){ S.wlDirty=true; render(); }
 
 const TITLES={today:'오늘',memo:'메모',plan:'일정·할 일',history:'기록',watch:'지표'};
+const WIDE = window.matchMedia('(min-width:1000px)');
 function setBadge(id, n){ const e=$(id); e.textContent=n>99?'99+':String(n); e.classList.toggle('hidden', !n); }
 function render(){
   if(!S.data) return;
-  $('#title').textContent=TITLES[S.tab];
-  document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.tab===S.tab));
   setBadge('#nb-memo', unseenList('memo').length);
   setBadge('#nb-history', unseenList('brief').length);
+  if (WIDE.matches && S.tab==='memo') S.tab='today';   // 넓은 화면에선 메모가 오른쪽에 항상 보임
+  $('#title').textContent=TITLES[S.tab];
+  document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.tab===S.tab));
   const v={today:viewToday,memo:viewMemo,plan:viewPlan,history:viewHistory,watch:viewWatch}[S.tab]();
   $('#view').innerHTML=v;
+  if (WIDE.matches) $('#side-list').innerHTML=viewMemo();
   $('#chatbar').classList.toggle('hidden', S.tab!=='memo');
   document.body.classList.toggle('chat', S.tab==='memo');
   if (S.tab==='watch' && !S.quotesLoaded) loadQuotes();
@@ -548,7 +576,7 @@ document.addEventListener('click', async e => {
   if (ds.histUnseen!==undefined){ S.histUnseen=!S.histUnseen; render(); return; }
   if (ds.pin){ const [ty,id]=ds.pin.split(/:(.+)/); await act('uiTogglePin', ty, id); return; }
   if (ds.toggle){ S.open[ds.toggle] = ds.state!=='1'; render(); return; }
-  if (ds.cmt){ const [ty,id]=ds.cmt.split(/:(.+)/); const v=document.getElementById('cin-'+ds.cmt).value; if(!v.trim()) return; await act('uiAddComment', ty, id, v); return; }
+  if (ds.cmt){ const [ty,id]=ds.cmt.split(/:(.+)/); const v=t.parentNode.querySelector('input').value; if(!v.trim()) return; await act('uiAddComment', ty, id, v); return; }
   if (ds.done){ const [ty,id]=ds.done.split(/:(.+)/); await act('uiSetDone', ty, id, t.checked); return; }
   if (ds.del){ const [ty,id]=ds.del.split(/:(.+)/); if(confirm('삭제할까요?')) await act('uiDelete', ty, id); return; }
   if (ds.editM){ memoSheet(S.data.memos.find(m=>m.id===ds.editM)); return; }
@@ -588,15 +616,19 @@ document.addEventListener('input', e => {
   if (t.id==='wl-prompt'){ S.wlPromptDraft=t.value; S.wlDirty=true; const b=$('#wl-save'); if(b){b.disabled=false;b.textContent='변경 내용 저장';} }
   if (t.id==='wl-q'){ S.q=t.value; }
 });
-async function sendChat(){
-  const el=$('#chat-in'), v=el.value.trim(); if(!v) return;
+async function sendChat(el){
+  el = el && el.tagName ? el : $('#chat-in');
+  const v=el.value.trim(); if(!v) return;
   el.value=''; el.style.height='';
   const now=new Date().toISOString();
-  S.data.memos.unshift({id:'tmp',text:v,status:'new',day:S.data.today,createdAt:now,seenAt:now,comments:[]}); S.memoFilter='all'; render(); window.scrollTo(0,0);
+  S.data.memos.unshift({id:'tmp',text:v,status:'new',day:S.data.today,createdAt:now,seenAt:now,comments:[]}); S.memoFilter='all'; render(); window.scrollTo(0,0); $('#side').scrollTop=0;
   try { S.data = await call('uiAddMemo', v, ''); render(); toast('저장됨'); }
   catch(e){ el.value=v; S.data.memos=S.data.memos.filter(m=>m.id!=='tmp'); render(); }
 }
-document.getElementById('chat-send').addEventListener('click', sendChat);
+document.getElementById('chat-send').addEventListener('click', () => sendChat($('#chat-in')));
+document.getElementById('side-send').addEventListener('click', () => sendChat($('#side-in')));
+document.getElementById('side-in').addEventListener('keydown', e => { if (e.key==='Enter' && (e.ctrlKey||e.metaKey)) { e.preventDefault(); sendChat($('#side-in')); } });
+WIDE.addEventListener('change', () => render());
 document.getElementById('chat-in').addEventListener('input', e => { e.target.style.height='auto'; e.target.style.height=Math.min(e.target.scrollHeight,140)+'px'; });
 document.addEventListener('keydown', e => { if (e.key==='Enter' && e.target.id==='wl-q'){ e.preventDefault(); $('#wl-search').click(); }});
 $('#sheetBg').addEventListener('click', e => { if (e.target.id==='sheetBg') closeSheet(); });
