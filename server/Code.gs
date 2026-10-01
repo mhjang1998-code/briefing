@@ -26,7 +26,7 @@ const SCHEMA = {
     ['seenAt', '확인시각'], ['domain', '관리']] },
   items: { sheet: '항목', key: 'id', bools: ['pinned'], cols: [
     ['id', 'id'], ['date', '날짜'], ['section', '섹션'], ['title', '제목'], ['body', '내용'], ['domain', '관리'],
-    ['createdAt', '작성시각'], ['seenAt', '확인시각'], ['pinned', '고정']] },
+    ['createdAt', '작성시각'], ['seenAt', '확인시각'], ['pinned', '고정'], ['memoIds', '메모id']] },
   comments: { sheet: '댓글', key: 'id', bools: ['seen'], cols: [
     ['id', 'id'], ['targetType', '대상'], ['targetId', '대상id'], ['by', '작성자'], ['text', '내용'],
     ['createdAt', '작성시각'], ['seen', '확인']] },
@@ -480,7 +480,8 @@ function apiPush_(body) {
       .map(i => i._row).sort((a, b) => b - a).forEach(r => sh.deleteRow(r));
     const add = body.items.filter(it => it && (it.title || it.body)).map(it => ({
       id: newId_('i'), date, section: it.section || '', title: it.title || '', body: it.body || '',
-      domain: doms.indexOf(it.domain) >= 0 ? it.domain : '기타', createdAt: now, seenAt: '', pinned: false }));
+      domain: doms.indexOf(it.domain) >= 0 ? it.domain : '기타', createdAt: now, seenAt: '', pinned: false,
+      memoIds: (Array.isArray(it.memoIds) ? it.memoIds : String(it.memoIds || '').split(',')).map(x => String(x).trim()).filter(Boolean).join(',') }));
     append_('items', add); counts.items = add.length;
   }
 

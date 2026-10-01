@@ -169,18 +169,29 @@ nav .nb{position:absolute;top:0;left:50%;margin-left:6px;background:var(--up);co
 .tl .card::before{content:"";position:absolute;left:-19px;top:18px;width:10px;height:10px;border-radius:50%;background:var(--accent);border:2px solid var(--bg)}
 .tl .card.mine::before{background:var(--warn)}
 .month{font-size:13px;font-weight:700;color:var(--sub);margin:16px 0 8px}
+.bgrid{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;align-items:start}
+.bgrid>.card{margin:0}
+.monthnav{display:flex;align-items:center;justify-content:center;gap:10px;margin:4px 0 12px}
+.monthnav b{font-size:17px;min-width:120px;text-align:center}
+.pair{margin:0 0 14px}
+.pair .mine-q{background:var(--card);border-radius:14px 14px 0 0;padding:12px 16px;box-shadow:var(--shadow);border-left:4px solid var(--warn)}
+.pair .ans{background:var(--card);border-top:1px dashed var(--line);padding:12px 16px 12px 28px;box-shadow:var(--shadow);border-left:4px solid var(--accent)}
+.pair .ans:last-child{border-radius:0 0 14px 14px}
+.pair .who{font-size:11px;font-weight:700;color:var(--faint);margin-bottom:4px}
+.pair .ans .who{color:var(--accent)}
 /* 노트북 등 넓은 화면: 왼쪽 세로 메뉴 + 넓은 본문. 폰 화면은 그대로 */
 @media (min-width:1000px){
   body,body.chat{padding:0 0 24px 92px}
-  header{padding:14px 24px 10px;max-width:960px;margin:0 auto}
+  header{padding:14px 24px 10px;max-width:1200px;margin:0 auto}
   nav{top:0;bottom:0;right:auto;width:84px;flex-direction:column;justify-content:flex-start;gap:6px;padding:72px 6px 12px;border-top:0;border-right:1px solid var(--line)}
   nav button{flex:none;padding:10px 0;border-radius:12px;font-size:12px}
   nav button.on{background:var(--accent-soft)}
   nav .nb{top:4px}
-  main{max-width:960px;padding:0 24px}
+  main{max-width:1200px;padding:0 24px}
   .composer{display:block}
   .chatbar{display:none!important}
   .domgrid{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .bgrid{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
 </style>
 </head>
@@ -189,7 +200,7 @@ nav .nb{position:absolute;top:0;left:50%;margin-left:6px;background:var(--up);co
 <main id="view"><div class="empty">불러오는 중…</div></main>
 
 <nav id="nav">
-  <button data-tab="today" class="on"><span class="i">☀️</span>오늘<span class="nb hidden" id="nb-today"></span></button>
+  <button data-tab="today" class="on"><span class="i">📋</span>브리핑<span class="nb hidden" id="nb-today"></span></button>
   <button data-tab="memo"><span class="i">📝</span>메모<span class="nb hidden" id="nb-memo"></span></button>
   <button data-tab="plan"><span class="i">🗓️</span>일정</button>
   <button data-tab="history"><span class="i">📚</span>기록</button>
@@ -211,7 +222,7 @@ const CONN = (() => {
 })();
 const KEY = CONN.key;
 const S = { data:null, tab:'today', briefDate:null, open:{}, planSeg:'calendar', memoFilter:'all', memoAll:false,
-  histUnseen:false, cal:null, selDay:null, dom:null, domEdit:false };
+  histUnseen:false, cal:null, selDay:null, dom:null, domEdit:false, histSeg:'items', month:null };
 const MEMO_LIMIT = 40;
 const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -340,40 +351,33 @@ function briefCard(b){
 }
 
 /* ── 탭별 화면 ── */
-function itemCard(it){
+function itemCard(it, mode){
   const k='item:'+it.id, nc=(it.comments||[]).length, seen=isSeen(it,'item'), open=threadOpen(k, !seen && it.seenAt);
   const body = it.section==='관심 지표' ? renderIndicators(it.body) : renderLines(it.body);
-  return `<section class="card item ${seen?'is-seen':''}">
-    <div class="ihead">${!seen&&it.seenAt?'<span class="chip unseen">새 답글</span>':''}<span class="chip sec">${esc(it.section||'브리핑')}</span>${domSelect('item', it.id, it.domain)}
+  const btn = mode==='record'
+    ? `<button class="tbtn" data-seen="item|${esc(it.id)}|0">브리핑으로 되돌리기</button>`
+    : `<button class="tbtn seen" data-seen="item|${esc(it.id)}|1">✓ 확인</button>`;
+  return `<section class="card item">
+    <div class="ihead">${!seen&&it.seenAt?'<span class="chip unseen">새 답글</span>':''}<span class="chip sec">${esc(it.section||'브리핑')}</span>
+      <span class="faint" style="margin-left:auto">관리</span>${domSelect('item', it.id, it.domain)}
       ${it.hasNewComment?'<span class="chip new">답변 대기</span>':''}</div>
     ${it.title?`<div class="ititle">${esc(it.title)}</div>`:''}${body}
-    <div class="tools">${seen?`<button class="tbtn seen-on" data-seen="item|${esc(it.id)}|0">✓ 확인함 (오늘로 되돌리기)</button>`:`<button class="tbtn seen" data-seen="item|${esc(it.id)}|1">✓ 확인</button>`}
-      <button class="tbtn" data-toggle="${esc(k)}" data-state="${open?1:0}">💬 코멘트 ${nc||''}</button></div>
+    <div class="tools">${btn}<button class="tbtn" data-toggle="${esc(k)}" data-state="${open?1:0}">💬 코멘트 ${nc||''}</button></div>
     ${commentThread('item', it.id, it.comments, open)}</section>`;
 }
 function viewToday(){
-  const d=S.data, b=d.briefs[0], items=unseenList('item');
-  let html = '';
-  // 1) 오늘 현황 (지표·일정·할 일·고정 추적): 매일 새로 바뀌므로 확인 없이 최신 것만
-  if (b){
-    const daily = DAILY.filter(f => b[f] && String(b[f]).trim());
-    if (daily.length) html += `<details class="card daily" ${S.dailyOpen===false?'':'open'}><summary>📊 ${md(b.date)} 현황 · 지표·일정·할 일 <span class="faint">(눌러서 접기)</span></summary>
-      ${daily.map(f => { const label=(d.sections.find(x=>x[0]===f)||[f,f])[1];
-        return `<h2 style="font-size:13px;color:var(--sub);margin:12px 0 6px">${esc(label)}</h2>${f==='sec_indicators'?renderIndicators(b[f]):renderLines(b[f])}`; }).join('')}</details>`;
-  }
-  // 2) 내 메모에 달린 새 답글
-  const mr = unseenList('memo').length;
-  if (mr) html += `<div class="card bar"><span class="chip unseen">새 답글</span><span class="sp">내 메모에 Claude 답글 ${mr}건</span><button class="tbtn" data-goto="memo">보기</button></div>`;
-  // 3) 확인할 브리핑 항목: 확인 안 하면 날짜별로 쌓인다
-  if (!items.length) return html + `<div class="card empty">확인할 브리핑이 없어요 👏<br><span class="faint">확인한 내용은 [관리]에서 카테고리별로 볼 수 있어요.</span></div>`;
-  html += `<div class="card bar"><b>확인할 브리핑 ${items.length}건</b><span class="faint sp">읽고 [✓ 확인]을 누르면 여기서 사라지고 [관리]로 옮겨져요</span></div>`;
-  let last=null;
+  const d=S.data, items=unseenList('item');
+  if (!items.length) return `<div class="card empty">새 브리핑이 없어요 👏<br><span class="faint">확인한 답변은 [기록]에 날짜별로, [관리]에 카테고리별로 있어요.</span></div>`;
+  let html = `<div class="card bar"><b>새 브리핑 ${items.length}건</b><span class="faint sp">읽고 [✓ 확인]을 누르면 여기서 내려가고 [기록]에 저장돼요</span></div>`;
+  let last=null, buf='';
+  const flush = () => { if (buf) { html += `<div class="bgrid">${buf}</div>`; buf=''; } };
   items.slice().sort((a,b)=>String(b.date).localeCompare(String(a.date))||String(a.createdAt).localeCompare(String(b.createdAt))).forEach(it => {
-    if (it.date!==last){ last=it.date; const n=items.filter(x=>x.date===it.date).length;
+    if (it.date!==last){ flush(); last=it.date; const n=items.filter(x=>x.date===it.date).length;
       html += `<div class="datehead"><b>${it.date===d.today?'오늘 · ':''}${md(it.date)}</b><span class="faint">${n}건</span>
         <button class="tbtn" style="margin-left:auto" data-seen-date="${esc(it.date)}">이 날 모두 확인</button></div>`; }
-    html += itemCard(it);
+    buf += itemCard(it);
   });
+  flush();
   return html;
 }
 function schedRow(s, showDate){
@@ -484,11 +488,23 @@ function viewHistory(){
     const b=d.briefs.find(x=>x.date===S.briefDate);
     return `<button class="tbtn" id="back" style="margin-bottom:10px">‹ 목록</button>${briefCard(b)}`;
   }
-  const list = d.briefs;
-  return `<div class="faint" style="margin:0 2px 8px">지난 브리핑 전체본이에요. 항목별 확인·분류는 [오늘]과 [관리]에서 해요.</div>
-    <section class="card">${list.map(b=>`<div class="row" data-open-b="${esc(b.date)}" style="cursor:pointer">
-    <div class="body"><div>${md(b.date)} ${b.pinned?'<span class="chip pin">고정</span>':''} ${b.hasNewComment?'<span class="chip new">새 댓글</span>':''}</div>
-    <div class="meta">${esc(String(b.header||'').replace(/^📋\s*/,''))}</div></div><span class="faint">›</span></div>`).join('') || '<div class="empty">기록이 없어요</div>'}</section>`;
+  const seg = S.histSeg;
+  let html = `<div class="seg"><button data-hseg="items" class="${seg==='items'?'on':''}">확인한 답변</button><button data-hseg="briefs" class="${seg==='briefs'?'on':''}">지난 브리핑 전체</button></div>`;
+  if (seg==='briefs'){
+    return html + `<section class="card">${d.briefs.map(b=>`<div class="row" data-open-b="${esc(b.date)}" style="cursor:pointer">
+      <div class="body"><div>${md(b.date)} ${b.pinned?'<span class="chip pin">고정</span>':''} ${b.hasNewComment?'<span class="chip new">새 댓글</span>':''}</div>
+      <div class="meta">${esc(String(b.header||'').replace(/^📋\s*/,''))}</div></div><span class="faint">›</span></div>`).join('') || '<div class="empty">기록이 없어요</div>'}</section>`;
+  }
+  const done = (d.items||[]).filter(i=>isSeen(i,'item'));
+  if (!done.length) return html + `<div class="empty">아직 확인한 답변이 없어요. [브리핑]에서 [✓ 확인]을 누르면 여기에 날짜별로 쌓여요.</div>`;
+  let last=null, buf='';
+  const flush = () => { if (buf) { html += `<div class="bgrid">${buf}</div>`; buf=''; } };
+  done.slice().sort((a,b)=>String(b.date).localeCompare(String(a.date))||String(a.createdAt).localeCompare(String(b.createdAt))).forEach(it => {
+    if (it.date!==last){ flush(); last=it.date; html += `<div class="datehead"><b>${md(it.date)}</b><span class="faint">${done.filter(x=>x.date===it.date).length}건</span></div>`; }
+    buf += itemCard(it, 'record');
+  });
+  flush();
+  return html;
 }
 const PRESETS = {
   '환율': [['원/달러','KRW=X'],['엔/원(1엔당)','JPYKRW=X'],['유로/원','EURKRW=X'],['달러인덱스','DX-Y.NYB']],
@@ -553,11 +569,15 @@ function viewWatch(){
 function wlChanged(){ S.wlDirty=true; render(); }
 
 /* ── 관리: 확인한 브리핑 항목 + 내 메모를 카테고리(금융·부동산…)별 시간순으로 ── */
+const memoIdsOf = it => String(it.memoIds||'').split(',').map(x=>x.trim()).filter(Boolean);
+function answersFor(memoId){ return (S.data.items||[]).filter(i => memoIdsOf(i).includes(memoId)); }
 function domEntries(dom){
-  const d=S.data;
-  const its = (d.items||[]).filter(i => i.domain===dom && isSeen(i,'item')).map(i => ({kind:'item', date:i.date, at:i.seenAt||i.createdAt, o:i}));
-  const ms = d.memos.filter(m => m.domain===dom).map(m => ({kind:'memo', date:m.day, at:m.createdAt, o:m}));
-  return its.concat(ms).sort((a,b)=>String(b.date).localeCompare(String(a.date))||String(b.at).localeCompare(String(a.at)));
+  const d=S.data, ms = d.memos.filter(m => m.domain===dom);
+  const linked = new Set(); ms.forEach(m => answersFor(m.id).forEach(i => linked.add(i.id)));
+  const its = (d.items||[]).filter(i => i.domain===dom && !linked.has(i.id) && isSeen(i,'item'));
+  return ms.map(m => ({kind:'memo', date:m.day, at:m.createdAt, o:m}))
+    .concat(its.map(i => ({kind:'item', date:i.date, at:i.createdAt, o:i})))
+    .sort((a,b)=>String(b.date).localeCompare(String(a.date))||String(b.at).localeCompare(String(a.at)));
 }
 function weekBars(entries){
   const today=parseDate(S.data.today), w=new Array(8).fill(0);
@@ -569,10 +589,14 @@ function viewManage(){
   const d=S.data;
   if (S.dom) return viewDomain(S.dom);
   const doms=domains();
-  let html = `<div class="faint" style="margin:0 2px 10px">[오늘]에서 확인한 브리핑과 내 메모·아이디어가 카테고리별로 쌓여요. 막대는 최근 8주 기록량이에요.</div><div class="domgrid">`;
-  doms.forEach(x => { const es=domEntries(x), wait=unseenList('item').filter(i=>i.domain===x).length;
+  let html = `<section class="card"><h2>새로 추가 (공부·아이디어·생각)</h2>
+    <textarea id="idea-in" style="min-height:64px" placeholder="적어 두면 메모로 저장되고, 다음 아침 브리핑에서 Claude가 분석·답변해 여기 아래에 붙여 줘요"></textarea>
+    <div class="cats" id="idea-doms">${doms.map((x,i)=>`<button data-dom="${esc(x)}" class="${i===0?'on':''}">${esc(x)}</button>`).join('')}</div>
+    <div class="form-row" style="margin-top:0"><button class="btn" id="idea-save">추가</button></div></section>
+    <div class="domgrid">`;
+  doms.forEach(x => { const es=domEntries(x);
     html += `<button class="domcard" data-open-dom="${esc(x)}"><span class="nm">${esc(x)}</span><span class="n">${es.length}</span>
-      <span class="faint">${es.length?'최근 '+md(es[0].date):'아직 없음'}${wait?` · 확인 대기 ${wait}`:''}</span>${weekBars(es)}</button>`; });
+      <span class="faint">${es.length?'최근 '+md(es[0].date):'아직 없음'}</span>${weekBars(es)}</button>`; });
   html += `</div>`;
   const none = d.memos.filter(m=>!m.domain).length;
   if (none) html += `<div class="faint" style="margin:10px 2px">분류 안 된 메모 ${none}건은 다음 아침 브리핑 때 Claude가 나눠 넣어요.</div>`;
@@ -583,34 +607,39 @@ function viewManage(){
       :`<div class="tools">${doms.map(x=>`<span class="chip">${esc(x)}</span>`).join('')}<button class="tbtn" id="dom-edit">편집</button></div>`}</section>`;
   return html;
 }
+function answerBlock(it){
+  const k='item:'+it.id, open=threadOpen(k,false), nc=(it.comments||[]).length, seen=isSeen(it,'item');
+  return `<div class="ans"><div class="who">Claude 답변 · ${md(it.date)} · ${esc(it.section||'')}${seen?'':' · <span class="chip unseen">브리핑에 있음</span>'}</div>
+    ${it.title?`<div class="ititle">${esc(it.title)}</div>`:''}${it.section==='관심 지표'?renderIndicators(it.body):renderLines(it.body)}
+    <div class="tools"><button class="tbtn" data-toggle="${esc(k)}" data-state="${open?1:0}">💬 ${nc||''}</button></div>
+    ${commentThread('item', it.id, it.comments, open)}</div>`;
+}
 function viewDomain(dom){
-  const es=domEntries(dom), wait=unseenList('item').filter(i=>i.domain===dom).length;
-  let html = `<div class="tools" style="margin:0 0 10px"><button class="tbtn" id="dom-back">‹ 카테고리</button><b style="font-size:18px;margin-left:4px">${esc(dom)}</b>
-    <span class="faint" style="margin-left:auto">${es.length}건${wait?` · 오늘에 확인 대기 ${wait}`:''}</span></div>
-    <section class="card"><h2>${esc(dom)}에 아이디어·공부 기록 추가</h2><textarea id="idea-in" style="min-height:64px" placeholder="예: 리츠 배당 구조 공부하기 / 신사업 아이디어 …"></textarea>
-      <div class="form-row"><button class="btn" id="idea-save">추가</button></div></section>`;
-  if (!es.length) return html + `<div class="empty">아직 기록이 없어요</div>`;
-  let lastM=null;
-  html += '<div class="tl">';
+  const all=domEntries(dom);
+  const months=[...new Set(all.map(e=>String(e.date).slice(0,7)))].sort().reverse();
+  const cur = S.month && (months.includes(S.month) || !months.length) ? S.month : (months[0] || S.data.today.slice(0,7));
+  S.month = cur;
+  const [cy,cm]=cur.split('-').map(Number);
+  const es = all.filter(e=>String(e.date).slice(0,7)===cur);
+  let html = `<div class="tools" style="margin:0 0 6px"><button class="tbtn" id="dom-back">‹ 카테고리</button><b style="font-size:18px;margin-left:4px">${esc(dom)}</b>
+    <span class="faint" style="margin-left:auto">전체 ${all.length}건</span></div>
+    <div class="monthnav"><button class="tbtn" data-month="-1" aria-label="이전 달">‹</button><b>${cy}년 ${cm}월</b><button class="tbtn" data-month="1" aria-label="다음 달">›</button></div>
+    <section class="card"><h2>${esc(dom)}에 새로 추가</h2><textarea id="idea-in" style="min-height:64px" placeholder="메모로 저장되고, 다음 아침 Claude가 분석해 이 아래에 답변을 붙여 줘요"></textarea>
+      <div class="form-row"><button class="btn" id="idea-save" data-dom-fixed="${esc(dom)}">추가</button></div></section>`;
+  if (!es.length) return html + `<div class="empty">${cy}년 ${cm}월 기록이 없어요${months.length?` · 기록 있는 달: ${months.map(x=>x.replace('-','.')).join(', ')}`:''}</div>`;
   es.forEach(e => {
-    const mo=String(e.date).slice(0,7);
-    if (mo!==lastM){ lastM=mo; html += `<div class="month">${mo.replace('-','년 ')}월</div>`; }
-    if (e.kind==='item'){ const it=e.o, k='item:'+it.id, open=threadOpen(k,false), nc=(it.comments||[]).length;
-      html += `<section class="card"><div class="ihead"><span class="faint">${md(it.date)}</span><span class="chip sec">브리핑 · ${esc(it.section||'')}</span>${domSelect('item', it.id, it.domain)}</div>
-        ${it.title?`<div class="ititle">${esc(it.title)}</div>`:''}${it.section==='관심 지표'?renderIndicators(it.body):renderLines(it.body)}
-        <div class="tools"><button class="tbtn" data-toggle="${esc(k)}" data-state="${open?1:0}">💬 ${nc||''}</button><button class="tbtn" data-seen="item|${esc(it.id)}|0">오늘로 되돌리기</button></div>
-        ${commentThread('item', it.id, it.comments, open)}</section>`;
-    } else { const m=e.o, k='memo:'+m.id, open=threadOpen(k,false), nc=(m.comments||[]).length;
-      html += `<section class="card mine"><div class="ihead"><span class="faint">${md(m.day)}</span><span class="chip pin">내 메모</span>${domSelect('memo', m.id, m.domain)}</div>
-        <div class="memo-text">${linkify(m.text)}</div>
-        <div class="tools"><button class="tbtn" data-toggle="${esc(k)}" data-state="${open?1:0}">💬 ${nc||''}</button><button class="tbtn" data-edit-m="${esc(m.id)}">편집</button></div>
-        ${commentThread('memo', m.id, m.comments, open)}</section>`;
+    if (e.kind==='memo'){ const m=e.o, ans=answersFor(m.id), k='memo:'+m.id;
+      html += `<div class="pair"><div class="mine-q"><div class="who">내 메모 · ${md(m.day)} ${m.status==='new'?'· <span class="chip new">다음 브리핑에서 분석</span>':''}
+          <span style="float:right">${domSelect('memo', m.id, m.domain)}</span></div>
+        <div class="memo-text">${linkify(m.text)}</div></div>
+        ${ans.length ? ans.map(answerBlock).join('') : `<div class="ans"><div class="faint">${m.status==='new'?'다음 아침 브리핑에서 답변이 붙어요':'연결된 답변이 없어요'}</div></div>`}</div>`;
+    } else {
+      html += `<div class="pair">${answerBlock(e.o).replace('class="ans"','class="ans" style="border-radius:14px;padding-left:16px"')}</div>`;
     }
   });
-  return html + '</div>';
+  return html;
 }
-
-const TITLES={today:'오늘',memo:'메모',plan:'일정·할 일',history:'기록',watch:'지표',manage:'관리'};
+const TITLES={today:'브리핑',memo:'메모',plan:'일정·할 일',history:'기록',watch:'지표',manage:'관리'};
 const WIDE = window.matchMedia('(min-width:1000px)');
 function setBadge(id, n){ const e=$(id); e.textContent=n>99?'99+':String(n); e.classList.toggle('hidden', !n); }
 function render(){
@@ -671,18 +700,23 @@ document.addEventListener('click', async e => {
   }
   if (ds.seenDate){ const ids=unseenList('item').filter(i=>i.date===ds.seenDate).map(i=>i.id);
     if (!ids.length || !confirm(`${md(ds.seenDate)} 항목 ${ids.length}건을 모두 확인할까요?`)) return;
-    await act('uiSetSeen', 'item', ids, true); toast('확인한 항목은 [관리]로 옮겨졌어요'); return; }
-  if (ds.openDom){ S.dom=ds.openDom; window.scrollTo(0,0); render(); return; }
+    await act('uiSetSeen', 'item', ids, true); toast('확인한 답변은 [기록]에 저장됐어요'); return; }
+  if (ds.openDom){ S.dom=ds.openDom; S.month=null; window.scrollTo(0,0); render(); return; }
   if (t.id==='dom-back'){ S.dom=null; render(); return; }
   if (t.id==='dom-edit'){ S.domEdit=true; render(); return; }
   if (t.id==='dom-done'){ S.domEdit=false; render(); return; }
   if (t.id==='dom-add'){ const v=$('#dom-new').value.trim(); if(!v) return; if(domains().includes(v)) return toast('이미 있어요'); await act('uiSaveDomains', domains().concat([v])); return; }
   if (ds.domDel!==undefined){ const list=domains().slice(), x=list[+ds.domDel];
     if (!confirm(`"${x}" 카테고리를 목록에서 뺄까요? (이미 분류된 기록은 남아 있어요)`)) return; list.splice(+ds.domDel,1); await act('uiSaveDomains', list); return; }
-  if (t.id==='idea-save'){ const v=$('#idea-in').value.trim(); if(!v) return toast('내용을 적어 주세요'); await act('uiAddMemo', v, '', S.dom); return; }
+  if (ds.dom!==undefined && t.closest('#idea-doms')){ t.parentNode.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b===t)); return; }
+  if (t.id==='idea-save'){ const v=$('#idea-in').value.trim(); if(!v) return toast('내용을 적어 주세요');
+    const dom = ds.domFixed || (document.querySelector('#idea-doms .on')||{}).dataset.dom || '';
+    await act('uiAddMemo', v, '', dom); toast(`${dom}에 추가 → 메모로 저장, 다음 아침 분석`); return; }
+  if (ds.month!==undefined){ let [y,m]=S.month.split('-').map(Number); m+=+ds.month; if(m<1){m=12;y--;} if(m>12){m=1;y++;} S.month=`${y}-${String(m).padStart(2,'0')}`; render(); return; }
+  if (ds.hseg){ S.histSeg=ds.hseg; render(); return; }
   if (t.id==='memo-send'){ sendChat($('#memo-in')); return; }
   if (ds.seen){ const [ty,id,v]=ds.seen.split('|'); await act('uiSetSeen', ty, [id], v==='1');
-    if (ty==='item') toast(v==='1' ? '확인 → [관리]로 옮겼어요' : '[오늘]로 되돌렸어요'); return; }
+    if (ty==='item') toast(v==='1' ? '확인 → [기록]에 저장했어요' : '[브리핑]으로 되돌렸어요'); return; }
   if (ds.seenAll){
     const ty=ds.seenAll, ids=unseenList(ty).map(o=>ty==='brief'?o.date:o.id);
     if (!ids.length || !confirm(`미확인 ${ids.length}건을 모두 확인할까요?`)) return;
