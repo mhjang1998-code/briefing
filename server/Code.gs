@@ -287,6 +287,7 @@ function onOpen() {
   SpreadsheetApp.getUi().createMenu('브리핑 앱')
     .addItem('초기 설정 (시트 만들기·키 발급)', 'setup')
     .addItem('앱 비밀번호 정하기', 'promptPin')
+    .addItem('⚡ 지금 브리핑 연결(토큰)', 'promptRoutineToken')
     .addItem('앱 주소·키 다시 보기', 'showKey')
     .addToUi();
 }
@@ -507,7 +508,15 @@ function apiPush_(body) {
       memoCount: b.memoCount || 0, commentCount: b.commentCount || 0 };
     SECTIONS.forEach(([f]) => { row[f] = (b.sections && b.sections[f]) || ''; });
     const found = findBy_('briefs', 'date', b.date);
-    if (found) patchRow_('briefs', found._row, row);
+    if (found && body.append) {
+      // 수시 브리핑: 아침 브리핑은 두고, 현황 섹션은 새 값으로·나머지는 뒤에 덧붙인다
+      const DAILY = ['sec_indicators', 'sec_schedule', 'sec_todo', 'sec_tracking'], p = {};
+      SECTIONS.forEach(([f]) => {
+        const v = (b.sections && b.sections[f]) || ''; if (!v) return;
+        p[f] = DAILY.indexOf(f) >= 0 || !found[f] ? v : String(found[f]) + '\n\n▸ ' + Utilities.formatDate(new Date(), TZ, 'HH:mm') + ' 추가\n' + v;
+      });
+      if (Object.keys(p).length) patchRow_('briefs', found._row, p);
+    } else if (found) patchRow_('briefs', found._row, row);
     else append_('briefs', [Object.assign(row, { pinned: false })]);
     counts.brief = 1;
   }
@@ -563,7 +572,7 @@ function apiPush_(body) {
   if (body.items && body.items.length && body.brief && body.brief.date) {
     const date = body.brief.date, doms = domains_(), cmt = commentsIndex_();
     const sh = sheetOf_('items');
-    readAll_('items').filter(i => i.date === date && !i.seenAt && !(cmt['item:' + i.id] || []).length)
+    if (!body.append) readAll_('items').filter(i => i.date === date && !i.seenAt && !(cmt['item:' + i.id] || []).length)
       .map(i => i._row).sort((a, b) => b - a).forEach(r => sh.deleteRow(r));
     invalidate_('items');
     const add = body.items.filter(it => it && (it.title || it.body)).map(it => ({
@@ -613,7 +622,7 @@ function importData_(d) {
 
 /* ───────────── 앱 화면용 함수 (google.script.run 또는 외부 앱의 POST action:"ui") ───────────── */
 
-const UI_FUNCS = { uiSetPin, uiSetSeed, uiSaveSeedList, uiRenameSeed, uiLoad, uiAddMemo, uiEditMemo, uiDeleteMemo, uiTogglePin, uiAddComment, uiDeleteComment,
+const UI_FUNCS = { uiRunBrief, uiSetRoutineToken, uiSetPin, uiSetSeed, uiSaveSeedList, uiRenameSeed, uiLoad, uiAddMemo, uiEditMemo, uiDeleteMemo, uiTogglePin, uiAddComment, uiDeleteComment,
   uiSetSeen, uiSetDomain, uiSaveDomains, uiSetEntry, uiSetEntries, uiDeleteItem, uiSaveTabs, uiSaveFolders, uiRenameFolder, uiDeleteFolder, uiSaveSchedule, uiSetDone, uiDelete, uiAddTodo, uiSaveWatchlist, uiSearch, uiQuotes };
 
 function uiDispatch_(body) {
@@ -711,6 +720,41 @@ function calDelete_(r) {
 function noRecurEdit_(id, patch) {
   const r = findBy_('schedules', 'id', id);
   if (r && r.recurring && ['title', 'date', 'time'].some(k => k in patch)) throw new Error('반복 일정은 구글 캘린더에서 고쳐 주세요.');
+}
+
+/* ⚡ 지금 브리핑: 앱 버튼 → 아침 브리핑 루틴을 바로 실행(수시 모드). 루틴 API 토큰은 스크립트 속성에만 저장 */
+const ROUTINE_ID = 'trig_019kHHwFVAua9dpSuPEXLgMW';
+function setRoutineToken_(t) {
+  t = String(t || '').trim();
+  const m = t.match(/routines\/(trig_[A-Za-z0-9]+)\/fire/);
+  const props = PropertiesService.getScriptProperties();
+  if (m) { props.setProperty('ROUTINE_ID', m[1]); return '주소를 저장했어요. 이제 토큰도 넣어 주세요.'; }
+  if (!/^sk-ant-[A-Za-z0-9_\-]{20,}$/.test(t)) throw new Error('토큰 형식이 아니에요 (sk-ant-… 로 시작).');
+  props.setProperty('ROUTINE_TOKEN', t);
+  return '저장했어요. 앱의 ⚡ 버튼으로 바로 브리핑할 수 있어요.';
+}
+function uiSetRoutineToken(key, t) { checkKey_(key); return { ok: true, message: setRoutineToken_(t) }; }
+function promptRoutineToken() {
+  const ui = SpreadsheetApp.getUi();
+  const r = ui.prompt('⚡ 지금 브리핑 연결', 'claude.ai 루틴 「일일 브리핑」 → 편집 → API 트리거에서 만든 토큰(sk-ant-…)을 붙여 넣으세요', ui.ButtonSet.OK_CANCEL);
+  if (r.getSelectedButton() !== ui.Button.OK) return;
+  try { ui.alert(setRoutineToken_(r.getResponseText())); } catch (e) { ui.alert(e.message); }
+}
+function uiRunBrief(key) {
+  checkKey_(key);
+  const props = PropertiesService.getScriptProperties(), tok = props.getProperty('ROUTINE_TOKEN');
+  if (!tok) return { ok: false, needToken: true };
+  const cache = CacheService.getScriptCache();
+  if (cache.get('runBrief')) return { ok: false, error: '방금 실행했어요. 몇 분 뒤 ↻ 로 확인해 주세요.' };
+  const id = props.getProperty('ROUTINE_ID') || ROUTINE_ID;
+  const res = UrlFetchApp.fetch('https://api.anthropic.com/v1/claude_code/routines/' + id + '/fire', {
+    method: 'post', contentType: 'application/json', muteHttpExceptions: true,
+    headers: { Authorization: 'Bearer ' + tok, 'anthropic-beta': 'experimental-cc-routine-2026-04-01', 'anthropic-version': '2023-06-01' },
+    payload: JSON.stringify({ text: 'mode=ondemand' }) });
+  const code = res.getResponseCode();
+  if (code >= 200 && code < 300) { cache.put('runBrief', '1', 300); return { ok: true }; }
+  if (code === 401 || code === 403) return { ok: false, needToken: true, error: '토큰이 맞지 않아요. 다시 넣어 주세요.' };
+  return { ok: false, error: '실행 실패 (' + code + ') ' + res.getContentText().slice(0, 120) };
 }
 
 /* 🌱 씨앗: 날짜·영역마다 0~SEED_MAX 개. 0이면 행을 지운다. 빠른 응답을 위해 씨앗만 돌려준다 */
@@ -1044,10 +1088,28 @@ function uiSearch(key, q) {
 }
 
 /** 야후 파이낸스에서 현재가·전일비·5일 등락을 가져온다. */
+/** "TV:거래소:티커" 지표(예: 코스피200 야간선물 TV:KRX:K2I1!)는 트레이딩뷰 시세(20분 지연, 야간장 포함)로 */
+function tvQuotes_(syms) {
+  const out = {};
+  if (!syms.length) return out;
+  try {
+    const res = UrlFetchApp.fetch('https://scanner.tradingview.com/global/scan', { method: 'post', contentType: 'application/json', muteHttpExceptions: true,
+      headers: { 'User-Agent': 'Mozilla/5.0' }, payload: JSON.stringify({ symbols: { tickers: syms.map(x => x.slice(3)) }, columns: ['close', 'change', 'Perf.W', 'currency'] }) });
+    (JSON.parse(res.getContentText()).data || []).forEach(r => {
+      out['TV:' + r.s] = { price: r.d[0], d1: r.d[1], d5: r.d[2], currency: r.d[3] || '' };
+    });
+  } catch (e) { Logger.log('tvQuotes_ ' + e); }
+  syms.forEach(x => { if (!(x in out)) out[x] = null; });
+  return out;
+}
+
 function uiQuotes(key, symbols) {
   checkKey_(key);
   symbols = (symbols || []).filter(Boolean).slice(0, 40);
   if (!symbols.length) return {};
+  const tv = tvQuotes_(symbols.filter(x => /^TV:/.test(x)));
+  symbols = symbols.filter(x => !/^TV:/.test(x));
+  if (!symbols.length) return tv;
   const reqs = symbols.map(sym => ({
     url: 'https://query1.finance.yahoo.com/v8/finance/chart/' + encodeURIComponent(sym) + '?range=7d&interval=1d',
     muteHttpExceptions: true, headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124 Safari/537.36' },
@@ -1062,7 +1124,7 @@ function uiQuotes(key, symbols) {
         currency: m.currency || '' };
     } catch (e) { out[symbols[i]] = null; }
   });
-  return out;
+  return Object.assign(out, tv);
 }
 
 /** 편집기에서 한 번 실행해 "외부 사이트 접속" 권한을 승인하는 용도 (종목 검색·시세에 필요) */
