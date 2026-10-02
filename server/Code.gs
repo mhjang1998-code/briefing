@@ -20,14 +20,14 @@ const SCHEMA = {
   briefs: { sheet: '브리핑', key: 'date', bools: ['pinned'], cols: [
     ['date', '날짜'], ['header', '헤더'], ...SECTIONS,
     ['memoCount', '메모수'], ['commentCount', '댓글수'], ['pinned', '고정'], ['createdAt', '작성시각'], ['seenAt', '확인시각']] },
-  memos: { sheet: '메모', key: 'id', bools: ['pinned', 'mpin', 'hidden'], cols: [
+  memos: { sheet: '메모', key: 'id', bools: ['pinned', 'mpin', 'hidden', 'study'], cols: [
     ['id', 'id'], ['day', '날짜'], ['text', '내용'], ['status', '상태'], ['category', '카테고리'],
     ['pinned', '고정'], ['createdAt', '작성시각'], ['updatedAt', '수정시각'], ['sentAt', '처리시각'], ['source', '출처'],
-    ['seenAt', '확인시각'], ['domain', '관리'], ['folder', '폴더'], ['mpin', '관리고정'], ['hidden', '숨김'], ['sort', '관리순서']] },
-  items: { sheet: '항목', key: 'id', bools: ['pinned', 'mpin', 'hidden'], cols: [
+    ['seenAt', '확인시각'], ['domain', '관리'], ['folder', '폴더'], ['mpin', '관리고정'], ['hidden', '숨김'], ['sort', '관리순서'], ['study', '공부']] },
+  items: { sheet: '항목', key: 'id', bools: ['pinned', 'mpin', 'hidden', 'study'], cols: [
     ['id', 'id'], ['date', '날짜'], ['section', '섹션'], ['title', '제목'], ['body', '내용'], ['domain', '관리'],
     ['createdAt', '작성시각'], ['seenAt', '확인시각'], ['pinned', '고정'], ['memoIds', '메모id'],
-    ['folder', '폴더'], ['mpin', '관리고정'], ['hidden', '숨김'], ['sort', '관리순서']] },
+    ['folder', '폴더'], ['mpin', '관리고정'], ['hidden', '숨김'], ['sort', '관리순서'], ['study', '공부']] },
   comments: { sheet: '댓글', key: 'id', bools: ['seen'], cols: [
     ['id', 'id'], ['targetType', '대상'], ['targetId', '대상id'], ['by', '작성자'], ['text', '내용'],
     ['createdAt', '작성시각'], ['seen', '확인']] },
@@ -48,14 +48,14 @@ const SCHEMA = {
 const CATEGORIES = ['일정', '할 일', '분석', '결정', '생각', '기타'];
 const DEFAULT_DOMAINS = ['금융', '부동산', '인사이트', '전공', '사업', '기타'];
 const TABS = ['today', 'memo', 'plan', 'history', 'watch', 'manage'];
-const SCHEMA_VERSION = 'v8';
+const SCHEMA_VERSION = 'v9';
 const CAL_PAST = 35, CAL_FUTURE = 120;   // 구글 캘린더와 맞추는 기간(일)
 const DEFAULT_SEEDS = ['전공', '영어', '금융', '부동산', '연애', '통제'];
 const SEED_MAX = 3;
 // 화면에서 직접 고칠 수 있는 칸 (앞으로 화면 기능을 늘려도 서버를 다시 붙여넣지 않도록 넓게 둔다)
 const EDITABLE = {
-  memos: ['text', 'day', 'category', 'domain', 'folder', 'mpin', 'hidden', 'sort', 'pinned', 'seenAt', 'status'],
-  items: ['section', 'title', 'body', 'domain', 'folder', 'mpin', 'hidden', 'sort', 'pinned', 'seenAt', 'memoIds', 'date'],
+  memos: ['text', 'day', 'category', 'domain', 'folder', 'mpin', 'hidden', 'sort', 'pinned', 'seenAt', 'status', 'study'],
+  items: ['section', 'title', 'body', 'domain', 'folder', 'mpin', 'hidden', 'sort', 'pinned', 'seenAt', 'memoIds', 'date', 'study'],
   schedules: ['title', 'date', 'time', 'done', 'note'],
   todos: ['text', 'done'],
 };
@@ -80,6 +80,7 @@ function ensureSetup_() {
     const cache = CacheService.getScriptCache();
     if (cache.get('schema') === SCHEMA_VERSION) return;
     ensureSheet_('items'); ensureSheet_('seeds'); ensureColumns_('watchlist'); ensureColumns_('memos'); ensureColumns_('briefs'); ensureColumns_('items'); ensureColumns_('schedules');
+    migrateStudy_();
     cache.put('schema', SCHEMA_VERSION, 21600);
     return;
   }
@@ -92,6 +93,18 @@ function ensureSetup_() {
 function pinHash_(pin) {
   return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, 'brief-pin:' + String(pin), Utilities.Charset.UTF_8)
     .map(b => ('0' + (b & 255).toString(16)).slice(-2)).join('');
+}
+/** v9 한 번: 예전 「관리」에서 내가 손댄 것(폴더·고정·순서·직접 쓴 정리)을 「공부」로 표시 */
+function migrateStudy_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('studyMigrated')) return;
+  withLockIf_(() => {
+    ['memos', 'items'].forEach(name => readAll_(name).forEach(o => {
+      const mine = o.folder || o.mpin || (o.sort !== '' && o.sort != null) || (name === 'memos' && o.status === 'note');
+      if (mine && !o.study) patchRow_(name, o._row, { study: true });
+    }));
+  });
+  props.setProperty('studyMigrated', '1');
 }
 function checkKey_(k) {
   const key = apiKey_();
@@ -751,7 +764,7 @@ function uiLoad(key) {
 }
 
 /** analyze=false 면 "관리 노트"(status=note)로 저장해 아침 분석에서 빠진다 */
-function uiAddMemo(key, text, category, domain, analyze, folder) {
+function uiAddMemo(key, text, category, domain, analyze, folder, study) {
   checkKey_(key);
   text = String(text || '').trim();
   if (!text) throw new Error('내용이 비어 있습니다.');
@@ -759,7 +772,7 @@ function uiAddMemo(key, text, category, domain, analyze, folder) {
   // 직접 쓴 메모는 쓰는 순간 본 것으로 둔다. Claude 답글이 달리면 다시 미확인이 된다.
   withLock_(() => append_('memos', [{ id: newId_('m'), day: today_(), text, status: analyze === false ? 'note' : 'new', folder: folder || '',
     category: CATEGORIES.indexOf(category) >= 0 ? category : '', pinned: false, createdAt: now, source: 'app', seenAt: now,
-    domain: domains_().indexOf(domain) >= 0 ? domain : '' }]));
+    domain: domains_().indexOf(domain) >= 0 ? domain : '', study: !!study }]));
   return uiLoad(key);
 }
 
