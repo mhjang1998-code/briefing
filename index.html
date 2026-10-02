@@ -185,6 +185,7 @@ nav .nb{position:absolute;top:0;left:50%;margin-left:6px;background:var(--up);co
 .checklist .grp2{font-size:12px;font-weight:700;color:var(--faint);margin:10px 0 2px}
 .checklist .grp2.late{color:var(--up)}
 .checklist .row{padding:7px 0}
+.checklist .mv{display:flex;gap:2px} .checklist .mv .tbtn{padding:4px 7px}
 .seedcard summary{cursor:pointer;font-weight:700;color:var(--sub);font-size:13px;list-style:none}
 .seedcard summary::-webkit-details-marker{display:none}
 .seedcard[open] summary{margin-bottom:8px}
@@ -625,17 +626,46 @@ function seedEditSheet(){
     <div class="form-row"><button class="btn" id="seed-save">이름 변경 저장</button></div>`);
 }
 async function seedCall(fn, ...args){ toast('저장 중…'); const r=await callOnce(fn,args); S.data.seeds=r.seeds; S.data.seedList=r.seedList; render(); toast('저장됨'); return r; }
-/* ✅ 맨 위 체크리스트: 지난 미완료 + 오늘 + 3일 이내 일정, 그리고 할 일 */
-function checklistCard(){
-  const d=S.data, T=d.today, lim=addDays(T,3);
+/* ✅ 맨 위 체크리스트: 지난 미완료 + 오늘 + 3일 이내 일정, 그리고 할 일.
+   내가 정한 순서는 설정 시트의 관리폴더 JSON 안 '__checkorder' 키에 id 목록으로 저장(서버 재배포 없이 기기 간 동기화) */
+const CHECK_KEY='__checkorder';
+const checkOrder = () => ((S.data.folders||{})[CHECK_KEY]) || [];
+function checkGroups(){
+  const d=S.data, T=d.today, lim=addDays(T,3), ord=checkOrder();
+  const rank = (k, fb) => { const i=ord.indexOf(k); return i<0 ? 1e6+fb : i; };
   const sch=(d.schedules||[]).filter(s=>!s.done && s.date && s.date<=lim).sort((a,b)=>(a.date+(a.time||'99')).localeCompare(b.date+(b.time||'99')));
-  const late=sch.filter(s=>s.date<T), today=sch.filter(s=>s.date===T), soon=sch.filter(s=>s.date>T), todos=(d.todos||[]).filter(t=>!t.done);
-  const n=late.length+today.length+soon.length+todos.length;
-  const grp=(cls,title,list,fn)=>list.length?`<div class="grp2 ${cls}">${title} ${list.length}</div>${list.map(fn).join('')}`:'';
+  const by = (list, key) => list.map((o,i)=>({o,k:key(o),r:rank(key(o),i)})).sort((a,b)=>a.r-b.r);
+  return [
+    ['late','⚠️ 지난 일정', by(sch.filter(s=>s.date<T), s=>'s:'+s.id), 'schedule'],
+    ['', '오늘', by(sch.filter(s=>s.date===T), s=>'s:'+s.id), 'schedule'],
+    ['', '3일 이내', by(sch.filter(s=>s.date>T), s=>'s:'+s.id), 'schedule'],
+    ['', '할 일', by((d.todos||[]).filter(t=>!t.done), t=>'t:'+t.id), 'todo'],
+  ];
+}
+function checkRow(g, x, i, n){
+  const o=x.o, ed=S.checkEdit;
+  const mv = ed ? `<span class="mv"><button class="tbtn" data-cmove="${esc(x.k)}|-1" ${i?'':'disabled'} aria-label="위로">▲</button><button class="tbtn" data-cmove="${esc(x.k)}|1" ${i<n-1?'':'disabled'} aria-label="아래로">▼</button></span>` : '';
+  if (g[3]==='schedule') return schedRow(o, g[1]!=='오늘').replace('<button class="tbtn" data-edit-s', mv+'<button class="tbtn" data-edit-s');
+  return `<div class="row"><input type="checkbox" class="chk" data-done="todo:${esc(o.id)}">
+    <div class="body">${linkify(o.text)}<div class="meta">${o.source==='claude'?'브리핑에서 추가':'직접 추가'} · 마감 없음</div></div>
+    ${mv}<button class="tbtn" data-edit-t="${esc(o.id)}">편집</button></div>`;
+}
+function checklistCard(){
+  const d=S.data, gs=checkGroups(), n=gs.reduce((a,g)=>a+g[2].length,0);
   const warn = d.calError ? `<div class="faint" style="color:var(--warn);margin-bottom:6px">📅 구글 캘린더 연결 안 됨 — Apps Script 편집기에서 <b>authorize</b> 함수를 한 번 실행해 권한을 허용해 주세요</div>` : '';
+  const body = gs.map(g => g[2].length ? `<div class="grp2 ${g[0]}">${g[1]} ${g[2].length}</div>${g[2].map((x,i)=>checkRow(g,x,i,g[2].length)).join('')}` : '').join('');
   return `<details class="card checklist" ${S.checkOpen===false?'':'open'}><summary>✅ 오늘 할 일 · 임박 ${n}건 <span class="faint">(눌러서 ${S.checkOpen===false?'펴기':'접기'})</span></summary>${warn}
-    ${n?grp('late','⚠️ 지난 일정',late,s=>schedRow(s,true))+grp('','오늘',today,s=>schedRow(s,false))+grp('','3일 이내',soon,s=>schedRow(s,true))+grp('','할 일',todos,todoRow)
-      :'<div class="faint">오늘·3일 이내 할 일이 없어요 🙌</div>'}</details>`;
+    <div class="tools" style="margin:0 0 4px"><button class="tbtn" id="todo-new">＋ 할 일</button><button class="tbtn ${S.checkEdit?'on':''}" id="check-edit">${S.checkEdit?'순서 편집 끝':'↕ 순서 바꾸기'}</button></div>
+    ${n?body:'<div class="faint">오늘·3일 이내 할 일이 없어요 🙌</div>'}</details>`;
+}
+function todoSheet(t){
+  openSheet(`<h3>${t?'할 일 편집':'할 일 추가'}</h3>
+    <textarea id="t-edit" style="min-height:70px" placeholder="무엇을 할까요?">${t?esc(t.text):''}</textarea>
+    <div class="faint" style="margin-top:8px">마감일 (정하면 📅 일정 탭·구글 캘린더에도 들어가요)</div>
+    <div class="form-row" style="margin-top:4px"><input id="t-due" type="date"><input id="t-time" type="time" style="flex:0 0 120px"></div>
+    <div class="cats" style="margin-top:6px">${[['오늘',0],['내일',1],['모레',2],['+1주',7]].map(([l,n])=>`<button data-due="${addDays(S.data.today,n)}">${l}</button>`).join('')}<button data-due="">마감 없음</button></div>
+    <div class="form-row">${t?`<button class="btn ghost" id="t-del" data-id="${esc(t.id)}" style="color:var(--up)">삭제</button>`:''}<button class="btn ghost" id="m-cancel">취소</button><button class="btn" id="t-save" data-id="${t?esc(t.id):''}">저장</button></div>`);
+  setTimeout(()=>{ const e=$('#t-edit'); if(e) e.focus(); },50);
 }
 function indicatorsCard(){
   const b=S.data.briefs.find(x=>x.sec_indicators && String(x.sec_indicators).trim());
@@ -1076,6 +1106,29 @@ document.addEventListener('click', async e => {
   const t=e.target.closest('button, [data-open-b], input.chk'); if(!t) return;
   const ds=t.dataset;
   if (t.closest('nav') && ds.tab){ if (S.tab===ds.tab && ds.tab==='manage') S.dom=null; S.tab=ds.tab; S.briefDate=null; window.scrollTo(0,0); render(); return; }
+  if (t.id==='check-edit'){ S.checkEdit=!S.checkEdit; const y=window.scrollY; render(); window.scrollTo(0,y); return; }
+  if (ds.cmove){ const [k,dir]=ds.cmove.split('|'); const gs=checkGroups(), flat=gs.flatMap(g=>g[2].map(x=>x.k));
+    const g=gs.find(g=>g[2].some(x=>x.k===k)), keys=g[2].map(x=>x.k), i=keys.indexOf(k), j=i+(+dir); if (j<0||j>=keys.length) return;
+    [keys[i],keys[j]]=[keys[j],keys[i]];
+    const order = gs.flatMap(gg => gg===g ? keys : gg[2].map(x=>x.k)).slice(0,30);
+    S.data.folders = Object.assign({}, S.data.folders||{}, {[CHECK_KEY]: order});
+    quick(null, 'uiSaveFolders', CHECK_KEY, order); return; }
+  if (t.id==='todo-new'){ todoSheet(null); return; }
+  if (ds.editT){ todoSheet((S.data.todos||[]).find(x=>x.id===ds.editT)); return; }
+  if (ds.due!==undefined && t.closest('#sheet')){ $('#t-due').value=ds.due; t.parentNode.querySelectorAll('button').forEach(b=>b.classList.toggle('on', b===t)); return; }
+  if (t.id==='t-del'){ if(!confirm('이 할 일을 삭제할까요?')) return; closeSheet(); const id=ds.id; quick(()=>{ S.data.todos=S.data.todos.filter(x=>x.id!==id); }, 'uiDelete','todo',id); toast('삭제했어요'); return; }
+  if (t.id==='t-save'){ const v=$('#t-edit').value.trim(), due=$('#t-due').value, tm=$('#t-time').value, id=ds.id; if(!v) return toast('내용을 적어 주세요');
+    closeSheet();
+    if (due){ // 마감일이 생기면 일정으로 옮긴다(일정 탭·구글 캘린더 연동)
+      const tmp={id:'tmp'+Date.now(), title:v, date:due, time:tm, done:false, source:'user'};
+      S.data.schedules=(S.data.schedules||[]).concat([tmp]); if(id) S.data.todos=S.data.todos.filter(x=>x.id!==id);
+      { const y=window.scrollY; render(); window.scrollTo(0,y); } QP++;
+      (async()=>{ try { let d=await call('uiSaveSchedule', {title:v, date:due, time:tm}); if(id) d=await call('uiDelete','todo',id); QP--; if(!QP){ S.data=d; if(!typing()) render(); } }
+        catch(e){ QP--; toast('저장 실패 · 다시 불러올게요'); try{ S.data=await call('uiLoad'); render(); }catch(_){} } })();
+      toast(`📅 ${md(due)} 일정으로 저장 · 일정 탭·구글 캘린더에도 들어가요`); return; }
+    if (id){ const o=S.data.todos.find(x=>x.id===id); quick(()=>{ if(o) o.text=v; }, 'uiSetEntry','todo',id,{text:v}); toast('수정했어요'); }
+    else { quick(()=>{ S.data.todos=[{id:'tmp'+Date.now(), text:v, done:false, source:'user', createdAt:nowIso()}].concat(S.data.todos||[]); }, 'uiAddTodo', v); toast('할 일을 추가했어요'); }
+    return; }
   if (t.id==='rt-save'){ const v=$('#rt-token').value.trim(); if(!v) return;
     try { const r=await callOnce('uiSetRoutineToken',[v]); $('#rt-token').value=''; toast(r.message||'저장됨'); } catch(e){ toast(e.message||'저장 실패 · 서버 업데이트가 필요할 수 있어요'); } return; }
   if (t.id==='runbrief'){
@@ -1206,7 +1259,8 @@ document.addEventListener('click', async e => {
       catch(e){ QP--; toast('저장 실패 · 다시 불러올게요'); try{ S.data=await call('uiLoad'); render(); }catch(_){} }
       return; }
     await act('uiAddComment', ty, id, v); return; }
-  if (ds.done){ const [ty,id]=ds.done.split(/:(.+)/); await act('uiSetDone', ty, id, t.checked); return; }
+  if (ds.done){ const [ty,id]=ds.done.split(/:(.+)/), v=t.checked; const o=(ty==='todo'?S.data.todos:S.data.schedules||[]).find(x=>x.id===id);
+    quick(()=>{ if(o) o.done=v; }, 'uiSetDone', ty, id, v); toast(v?'✓ 완료':'완료 취소'); return; }
   if (ds.del){ const [ty,id]=ds.del.split(/:(.+)/); if(confirm('삭제할까요?')) await act('uiDelete', ty, id); return; }
   if (ds.editM){ memoSheet(S.data.memos.find(m=>m.id===ds.editM)); return; }
   if (ds.delM){ if(confirm('이 메모와 댓글을 삭제할까요?')) await act('uiDeleteMemo', ds.delM); return; }
