@@ -87,9 +87,36 @@ function ensureSetup_() {
     setup();
   });
 }
+/* 인증: 긴 인증 키 또는 사용자가 정한 앱 비밀번호(해시로만 저장). 비밀번호 오답이 몰리면 10분간 비밀번호만 막는다 */
+function pinHash_(pin) {
+  return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, 'brief-pin:' + String(pin), Utilities.Charset.UTF_8)
+    .map(b => ('0' + (b & 255).toString(16)).slice(-2)).join('');
+}
 function checkKey_(k) {
   const key = apiKey_();
-  if (!key || String(k || '') !== key) throw new Error('인증 키가 올바르지 않습니다.');
+  k = String(k || '');
+  if (key && k === key) return;
+  const h = PropertiesService.getScriptProperties().getProperty('APP_PIN_HASH');
+  const cache = CacheService.getScriptCache(), fails = +(cache.get('pinFails') || 0);
+  if (h && k && fails < 20 && pinHash_(k) === h) return;
+  if (h && k) cache.put('pinFails', String(fails + 1), 600);
+  throw new Error(fails >= 20 ? '비밀번호를 여러 번 틀려서 10분 동안 잠겼어요.' : '비밀번호(인증 키)가 올바르지 않습니다.');
+}
+function setPin_(pin) {
+  pin = String(pin || '').trim();
+  if (pin.length < 6 || /\s/.test(pin)) throw new Error('비밀번호는 띄어쓰기 없이 6자 이상으로 정해 주세요.');
+  PropertiesService.getScriptProperties().setProperty('APP_PIN_HASH', pinHash_(pin));
+  CacheService.getScriptCache().remove('pinFails');
+}
+/** 앱 ⚙️ 에서 비밀번호 정하기·바꾸기 (현재 키나 비밀번호로 로그인한 상태여야 함) */
+function uiSetPin(key, pin) { checkKey_(key); setPin_(pin); return { ok: true }; }
+/** 시트 메뉴 「브리핑 앱 → 앱 비밀번호 정하기」 */
+function promptPin() {
+  const ui = SpreadsheetApp.getUi();
+  const r = ui.prompt('앱 비밀번호 정하기', '새 컴퓨터·폰에서 앱을 열 때 넣을 비밀번호 (띄어쓰기 없이 6자 이상)', ui.ButtonSet.OK_CANCEL);
+  if (r.getSelectedButton() !== ui.Button.OK) return;
+  try { setPin_(r.getResponseText()); ui.alert('저장했어요. 앱 연결 화면에 이 비밀번호를 넣으면 돼요.'); }
+  catch (e) { ui.alert(e.message); }
 }
 function toBool_(v) { return v === true || v === 'TRUE' || v === 'true' || v === 1; }
 
@@ -245,6 +272,7 @@ function setSetting_(k, v) { upsert_('settings', { key: k, value: v }); }
 function onOpen() {
   SpreadsheetApp.getUi().createMenu('브리핑 앱')
     .addItem('초기 설정 (시트 만들기·키 발급)', 'setup')
+    .addItem('앱 비밀번호 정하기', 'promptPin')
     .addItem('앱 주소·키 다시 보기', 'showKey')
     .addToUi();
 }
@@ -348,7 +376,7 @@ function doGet(e) {
       throw new Error('알 수 없는 api: ' + p.api);
     } catch (err) { return json_({ ok: false, error: String(err.message || err) }); }
   }
-  if (!apiKey_() || p.k !== apiKey_()) {
+  if (!apiKey_() || p.k !== apiKey_()) {  // 옛 Apps Script 화면은 긴 키로만
     return HtmlService.createHtmlOutput('<p style="font:16px sans-serif;padding:24px">앱 주소 끝에 ?k=인증키 를 붙여서 여세요.</p>')
       .addMetaTag('viewport', 'width=device-width, initial-scale=1');
   }
@@ -569,7 +597,7 @@ function importData_(d) {
 
 /* ───────────── 앱 화면용 함수 (google.script.run 또는 외부 앱의 POST action:"ui") ───────────── */
 
-const UI_FUNCS = { uiSetSeed, uiSaveSeedList, uiRenameSeed, uiLoad, uiAddMemo, uiEditMemo, uiDeleteMemo, uiTogglePin, uiAddComment, uiDeleteComment,
+const UI_FUNCS = { uiSetPin, uiSetSeed, uiSaveSeedList, uiRenameSeed, uiLoad, uiAddMemo, uiEditMemo, uiDeleteMemo, uiTogglePin, uiAddComment, uiDeleteComment,
   uiSetSeen, uiSetDomain, uiSaveDomains, uiSetEntry, uiSetEntries, uiDeleteItem, uiSaveTabs, uiSaveFolders, uiRenameFolder, uiDeleteFolder, uiSaveSchedule, uiSetDone, uiDelete, uiAddTodo, uiSaveWatchlist, uiSearch, uiQuotes };
 
 function uiDispatch_(body) {
