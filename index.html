@@ -277,36 +277,41 @@ nav .nb{position:absolute;top:0;left:50%;margin-left:6px;background:var(--up);co
 <div class="toast" id="toast"></div>
 
 <script>
-/* 연결 정보: 처음 한 번 주소 뒤 #u=<앱스크립트 exec 주소>&k=<키> 로 열면 이 기기에 저장된다 */
+/* 연결 정보: 서버 주소는 고정(아래 DEFAULT_API), 인증 키만 이 기기에 저장한다.
+   예전 즐겨찾기의 #u=(옛 배포 주소)는 무시한다 — 옛 배포가 정리되면 오류 페이지가 와서 연결이 끊겼기 때문 */
+const DEFAULT_API = 'https://script.google.com/macros/s/AKfycbwsuyHhqjNXSUV3cqhV5UGpHW_CPZaMVxw5dhRRvTHFGHKprbdnp5yylkgCxSy3xreqFA/exec';
+const STORE_OK = (() => { try { localStorage.setItem('__t','1'); localStorage.removeItem('__t'); return true; } catch (e) { return false; } })();
 const CONN = (() => {
-  const store = (k, v) => { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } };
   const h = new URLSearchParams(location.hash.slice(1));
-  if (h.get('u') && h.get('k')) { store('brief_api', h.get('u')); store('brief_key', h.get('k')); }
-  return { url: h.get('u') || store('brief_api'), key: h.get('k') || store('brief_key') };
+  let key = h.get('k');
+  if (key) { try { localStorage.setItem('brief_key', key); localStorage.setItem('brief_api', DEFAULT_API); } catch (e) {} }
+  else { try { key = localStorage.getItem('brief_key'); } catch (e) { key = null; } }
+  return { url: DEFAULT_API, key };
 })();
 const KEY = CONN.key;
-const DEFAULT_API = 'https://script.google.com/macros/s/AKfycbwsuyHhqjNXSUV3cqhV5UGpHW_CPZaMVxw5dhRRvTHFGHKprbdnp5yylkgCxSy3xreqFA/exec';
-/* 붙여 넣은 값에서 주소·키를 뽑는다: …#u=…&k=… / …/exec?k=… / 인증 키만 */
+/* 붙여 넣은 값에서 인증 키를 뽑는다: 키만 / …k=키 / 「인증 키: 키」 문구 통째 */
 function parseConn(v){
   v = String(v||'').trim(); if (!v) return null;
-  const i = v.indexOf('#');
-  if (i >= 0) { const h = new URLSearchParams(v.slice(i+1)); if (h.get('u') && h.get('k')) return { u:h.get('u'), k:h.get('k') }; }
-  const m = v.match(/^(https:\/\/script\.google\.com\/[^?#\s]+\/exec)\?(?:.*&)?k=([^&#\s]+)/);
-  if (m) return { u:m[1], k:decodeURIComponent(m[2]) };
+  let m = v.match(/[?#&]k=([^&#\s]+)/) || v.match(/인증\s*키\s*[:：]\s*([A-Za-z0-9_-]{16,})/);
+  if (m) return { u:DEFAULT_API, k:decodeURIComponent(m[1]) };
   if (/^[A-Za-z0-9_-]{16,}$/.test(v)) return { u:DEFAULT_API, k:v };
   return null;
 }
 function showConnect(msg){
   $('#view').innerHTML = `<section class="card"><h2>${msg?'연결 다시 설정':'처음 연결'}</h2>
     ${msg?`<div class="muted" style="margin-bottom:8px;color:var(--warn)">${esc(msg)}</div>`:''}
-    <div class="muted" style="margin-bottom:8px">구글 시트 「아침 브리핑」 → 메뉴 <b>브리핑 앱 → 앱 주소·키 다시 보기</b>에 나오는 <b>인증 키</b>(또는 앱 주소 전체)를 붙여 넣으세요. 이 기기에만 저장됩니다.</div>
+    <ol class="muted" style="margin:0 0 8px;padding-left:20px;line-height:1.7">
+      <li><a href="https://docs.google.com/spreadsheets/d/1rBpt0chrirrIrYuaREaA-3Omi9Go5wlayPWRe_ejI98/edit" target="_blank" rel="noopener">구글 시트 「아침 브리핑」</a> 열기</li>
+      <li>위쪽 메뉴 <b>브리핑 앱 → 앱 주소·키 다시 보기</b></li>
+      <li>뜬 창의 글 전체(또는 <b>인증 키</b>)를 복사해 아래에 붙여 넣고 [연결]</li></ol>
+    ${STORE_OK?'':'<div class="muted" style="margin-bottom:8px;color:var(--warn)">이 브라우저는 저장이 막혀 있어요. 연결 후 주소창의 주소를 즐겨찾기 해 두세요.</div>'}
     <textarea id="conn-in" placeholder="인증 키 또는 https://…/exec?k=…"></textarea>
     <div class="form-row"><button class="btn" id="conn-save">연결</button></div></section>`;
   $('#conn-save').onclick = () => {
     const c = parseConn($('#conn-in').value);
     if (!c) return toast('키 또는 주소 형식을 확인해 주세요');
-    try { localStorage.setItem('brief_api', c.u); localStorage.setItem('brief_key', c.k); } catch (e) {}
-    location.hash = ''; location.reload();
+    if (STORE_OK) { try { localStorage.setItem('brief_api', c.u); localStorage.setItem('brief_key', c.k); } catch (e) {} location.replace(location.pathname); }
+    else { location.replace(location.pathname + '#k=' + encodeURIComponent(c.k)); location.reload(); }
   };
 }
 const S = { data:null, tab:'today', briefDate:null, open:{}, planSeg:'calendar', memoFilter:'all', memoAll:false,
@@ -1001,6 +1006,7 @@ document.addEventListener('click', async e => {
   const t=e.target.closest('button, [data-open-b], input.chk'); if(!t) return;
   const ds=t.dataset;
   if (t.closest('nav') && ds.tab){ if (S.tab===ds.tab && ds.tab==='manage') S.dom=null; S.tab=ds.tab; S.briefDate=null; window.scrollTo(0,0); render(); return; }
+  if (t.id==='refresh' && !KEY){ showConnect(); toast('먼저 인증 키를 넣어 주세요'); return; }
   if (t.id==='refresh'){ toast('불러오는 중…'); S.data=await call('uiLoad'); S.wl=null; S.wlDirty=false; S.wlPromptDraft=null; S.quotesLoaded=false; render(); toast('최신 상태'); return; }
   if (t.id==='fab'){ memoSheet(null); return; }
   if (t.id==='m-cancel'){ closeSheet(); return; }
@@ -1203,7 +1209,8 @@ document.addEventListener('keydown', e => { if (e.key==='Enter' && e.target.id &
 if (!CONN.url || !CONN.key) {
   showConnect();
 } else {
-  if (location.hash) history.replaceState(null, '', location.pathname + location.search);
+  // 키가 기기에 저장됐으면 주소창에서 지운다(저장이 막힌 브라우저면 주소에 남겨 즐겨찾기로 쓰게 둔다)
+  if (location.hash && STORE_OK) history.replaceState(null, '', location.pathname + location.search);
   call('uiLoad').then(d => { S.data=d; render(); }).catch(e => { if (!S.data) showConnect('서버에 연결하지 못했어요 (' + (e && e.message || '오류') + '). ↻로 다시 시도하거나, 키를 다시 넣어 주세요.'); });
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && S.data)
     call('uiLoad').then(d => { S.data=d; render(); }).catch(()=>{}); });
