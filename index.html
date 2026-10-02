@@ -218,8 +218,8 @@ nav .nb{position:absolute;top:0;left:50%;margin-left:6px;background:var(--up);co
 .ckghost{position:fixed;z-index:50;pointer-events:none;background:var(--card);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.25);padding:6px 10px;opacity:.95}
 .dtag{display:inline-block;font-size:11px;font-weight:800;border-radius:6px;padding:1px 6px;margin-right:4px;vertical-align:1px}
 .dtag.late{background:color-mix(in srgb,var(--bkLate) 16%,var(--card));color:var(--bkLate)}
-.dtag.r{background:#fde2e2;color:#c81e1e} .dtag.o{background:#ffedd5;color:#c2410c} .dtag.y{background:#fef3c7;color:#a16207} .dtag.g{background:var(--chip);color:var(--sub)}
-@media (prefers-color-scheme: dark){ .dtag.r{background:#4a1d1d;color:#ff8a8a} .dtag.o{background:#43260f;color:#fdba74} .dtag.y{background:#3f3510;color:#fde047} }
+.dtag.r{background:#fde2e2;color:#c81e1e} .dtag.o{background:#ffedd5;color:#c2410c} .dtag.y{background:#fef3c7;color:#a16207} .dtag.gr{background:#dcfce7;color:#15803d} .dtag.b{background:#dbeafe;color:#1d4ed8}
+@media (prefers-color-scheme: dark){ .dtag.r{background:#4a1d1d;color:#ff8a8a} .dtag.o{background:#43260f;color:#fdba74} .dtag.y{background:#3f3510;color:#fde047} .dtag.gr{background:#12341f;color:#86efac} .dtag.b{background:#172a4d;color:#93c5fd} }
 .ckresize{height:16px;margin:2px -16px -14px;display:flex;align-items:center;justify-content:center;cursor:ns-resize;touch-action:none}
 .ckresize i{width:44px;height:4px;border-radius:4px;background:var(--line)}
 .ckresize:hover i{background:var(--faint)}
@@ -715,10 +715,10 @@ function dTag(ds){
   if (!ds) return '';
   const n = dayDiff(ds);
   if (n < 0) return `<span class="dtag late">${-n}일 지남</span>`;
-  return `<span class="dtag ${n<=3?'r':n<=7?'o':n<=14?'y':'g'}">${n===0?'D-day':'D-'+n}</span>`;
+  return `<span class="dtag ${n<=3?'r':n<=7?'o':n<=14?'y':n<=30?'gr':'b'}">${n===0?'D-day':'D-'+n}</span>`;
 }
 function checkItems(){
-  const d=S.data, lim=addDays(d.today,14), L=layout(), assigned=new Set(Object.values(L.items).flat());
+  const d=S.data, lim=addDays(d.today,30), L=layout(), assigned=new Set(Object.values(L.items).flat());
   return (d.schedules||[]).filter(s => !s.done && s.date && (s.date<=lim || assigned.has('s:'+s.id))).map(s => ({k:'s:'+s.id, type:'schedule', o:s, date:s.date}))
     .concat((d.todos||[]).filter(t => !t.done).map(t => ({k:'t:'+t.id, type:'todo', o:t, date:''})));
 }
@@ -1233,7 +1233,7 @@ document.addEventListener('click', async e => {
       (async()=>{ try { let d=await call('uiSaveSchedule', {title:v, date:due, time:tm}); if(id) d=await call('uiDelete','todo',id);
           const ns=(d.schedules||[]).filter(x=>x.title===v && x.date===due).sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)))[0];
           if (ns){ const L=layout(); let hit=false; Object.keys(L.items).forEach(b=>{ L.items[b]=L.items[b].map(k=>{ if(k==='t:'+id){ hit=true; return 's:'+ns.id; } return k; }); });
-            if (!hit && bkt) (L.items[bkt]=L.items[bkt]||[]).unshift('s:'+ns.id); d.uiset=Object.assign({},d.uiset||{},{checklist:L}); saveLayout(L); }
+            if (!hit){ const tb = bkt || (dayDiff(due)<=3 ? L.buckets[0].id : (L.buckets[1]||L.buckets[0]).id); (L.items[tb]=L.items[tb]||[]).unshift('s:'+ns.id); } d.uiset=Object.assign({},d.uiset||{},{checklist:L}); saveLayout(L); }
           QP--; if(!QP){ S.data=d; if(!typing()) render(); } }
         catch(e){ QP--; toast('저장 실패 · 다시 불러올게요'); try{ S.data=await call('uiLoad'); render(); }catch(_){} } })();
       toast(`📅 ${md(due)} 일정으로 저장 · 일정 탭·구글 캘린더에도 들어가요`); return; }
