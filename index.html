@@ -179,7 +179,8 @@ nav .nb{position:absolute;top:0;left:50%;margin-left:6px;background:var(--up);co
 .sstats{display:flex;gap:8px;margin:4px 0 8px}
 .sstats div{flex:1;background:var(--chip);border-radius:10px;padding:6px 8px;text-align:center}
 .sstats b{display:block;font-size:18px;color:var(--ink)} .sstats span{font-size:11px;color:var(--faint)}
-.segs{display:flex;gap:8px;flex-wrap:wrap} .segs .seg{margin:0 0 8px;flex:1;min-width:150px}
+.segs{display:flex;gap:8px;flex-wrap:wrap} .segs .seg{margin:0;flex:1;min-width:150px} .segs{margin-bottom:8px}
+.segs .seg button{padding:6px 4px;font-size:13px}
 .schart{position:relative;width:100%;height:210px;touch-action:pan-y}
 .schart svg{display:block;width:100%;height:100%}
 .schart .grid{stroke:var(--line);stroke-width:1}
@@ -514,14 +515,15 @@ function seedSeries(mode){
 }
 function seedCard(where){
   if (!S.data.seedList) return `<div class="card faint">🌱 씨앗 기능은 Apps Script 서버를 새 버전으로 배포하면 켜져요.</div>`;
-  const d=S.data, mode=S.seedMode||'week', view=S.seedView||'total', today=d.today;
+  const d=S.data, mode=S.seedMode||'week', view=S.seedView||'total', kind=S.seedKind||'cum', today=d.today;
   const all=d.seeds||[], sum=f=>all.filter(f).reduce((a,x)=>a+(+x.count||0),0);
   const wk=weekStart(today), mon=today.slice(0,7);
   const stats=`<div class="sstats"><div><b>${seedDaySum(today)}</b><span>오늘</span></div><div><b>${sum(x=>x.date>=wk&&x.date<=today)}</b><span>이번 주</span></div><div><b>${sum(x=>x.date.slice(0,7)===mon)}</b><span>이번 달</span></div><div><b>${sum(()=>true)}</b><span>전체</span></div></div>`;
   const ctrls=`<div class="segs"><div class="seg"><button data-smode="week" class="${mode==='week'?'on':''}">주간</button><button data-smode="month" class="${mode==='month'?'on':''}">월간</button></div>
+    <div class="seg"><button data-skind="cum" class="${kind==='cum'?'on':''}">누적</button><button data-skind="bar" class="${kind==='bar'?'on':''}">기간별</button></div>
     <div class="seg"><button data-sview="total" class="${view==='total'?'on':''}">합계</button><button data-sview="area" class="${view==='area'?'on':''}">영역별</button></div></div>`;
   const legend = view==='area' ? `<div class="slegend">${(d.seedList||[]).slice(0,8).map(n=>`<button class="${(S.seedOff||{})[n]?'off':''}" data-soff="${esc(n)}"><i style="background:${seedColor(n)}"></i>${esc(n)}</button>`).join('')}</div>` : '';
-  const chart = `${ctrls}<div class="schart" data-schart="1"></div>${legend}<div class="faint" style="margin-top:4px">${mode==='week'?'최근 12주':'최근 12개월'} 누적 씨앗 · 점을 누르거나 올리면 수치</div>`;
+  const chart = `${ctrls}<div class="schart" data-schart="1"></div>${legend}<div class="faint" style="margin-top:4px">${mode==='week'?'최근 12주':'최근 12개월'} ${kind==='cum'?'누적 씨앗':(mode==='week'?'주마다 심은 씨앗':'달마다 심은 씨앗')} · 누르거나 올리면 수치</div>`;
   if (where==='today') return `<details class="card seedcard" ${S.seedOpen===false?'':'open'}><summary>🌱 씨앗 ${sum(()=>true)}개 쌓는 중 <span class="faint">(눌러서 ${S.seedOpen===false?'펴기':'접기'})</span></summary>
     ${stats}${chart}<div style="margin-top:12px"><b style="font-size:13px">오늘 심은 씨앗</b><div style="margin-top:6px">${seedButtons(today)}</div></div></details>`;
   return `<section class="card"><h2>🌱 씨앗 성장</h2>${stats}${chart}</section>`;
@@ -529,24 +531,35 @@ function seedCard(where){
 function drawSeedCharts(){
   document.querySelectorAll('[data-schart]').forEach(box=>{
     const W=box.clientWidth||320, H=box.clientHeight||210, P={l:34,r:12,t:12,b:24};
-    const s=seedSeries(S.seedMode||'week'), view=S.seedView||'total', off=S.seedOff||{};
-    const lines = view==='total' ? [{name:'합계',col:'var(--seed)',vals:s.cumTot}] : s.names.filter(n=>!off[n]).map(n=>({name:n,col:seedColor(n),vals:s.cumPer[n]}));
-    const maxV=Math.max(4,...lines.flatMap(l=>l.vals)), step=Math.pow(10,Math.floor(Math.log10(maxV))) * (maxV/Math.pow(10,Math.floor(Math.log10(maxV)))>5?2:1);
+    const s=seedSeries(S.seedMode||'week'), view=S.seedView||'total', off=S.seedOff||{}, bar=(S.seedKind||'cum')==='bar';
+    const lines = bar
+      ? (view==='total' ? [{name:'합계',col:'var(--seed)',vals:s.tot}] : s.names.filter(n=>!off[n]).map(n=>({name:n,col:seedColor(n),vals:s.per.map(p=>p[n]||0)})))
+      : (view==='total' ? [{name:'합계',col:'var(--seed)',vals:s.cumTot}] : s.names.filter(n=>!off[n]).map(n=>({name:n,col:seedColor(n),vals:s.cumPer[n]})));
+    const stackTop = bar ? s.keys.map((_,i)=>lines.reduce((a,l)=>a+l.vals[i],0)) : [];
+    const maxV=Math.max(4,...(bar?stackTop:lines.flatMap(l=>l.vals))), step=Math.pow(10,Math.floor(Math.log10(maxV))) * (maxV/Math.pow(10,Math.floor(Math.log10(maxV)))>5?2:1);
     const top=Math.ceil(maxV/step)*step, n=s.keys.length;
-    const x=i=>P.l+(W-P.l-P.r)*(n<2?0:i/(n-1)), y=v=>P.t+(H-P.t-P.b)*(1-v/top);
+    const slot=(W-P.l-P.r)/n, x=bar ? (i=>P.l+slot*(i+.5)) : (i=>P.l+(W-P.l-P.r)*(n<2?0:i/(n-1))), y=v=>P.t+(H-P.t-P.b)*(1-v/top);
     let g=''; for(let v=0; v<=top; v+=step){ g+=`<line class="grid" x1="${P.l}" x2="${W-P.r}" y1="${y(v)}" y2="${y(v)}"/><text class="ax" x="${P.l-6}" y="${y(v)+4}" text-anchor="end">${v}</text>`; }
     const every=Math.ceil(n/(W<420?4:6));
     s.labels.forEach((t,i)=>{ if((n-1-i)%every===0) g+=`<text class="ax" x="${x(i)}" y="${H-6}" text-anchor="middle">${t}</text>`; });
-    const paths=lines.map(l=>`<polyline fill="none" stroke="${l.col}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" points="${l.vals.map((v,i)=>x(i)+','+y(v)).join(' ')}"/>`
+    const bw=Math.max(6,Math.min(28,slot*.6));
+    const paths = bar ? s.keys.map((_,i)=>{ let acc=0, out=''; const segs=lines.filter(l=>l.vals[i]>0);
+        segs.forEach((l,j)=>{ const y0=y(acc), y1=y(acc+l.vals[i]); acc+=l.vals[i]; const h=Math.max(0,y0-y1-(j?2:0)), last=j===segs.length-1;
+          out+= last ? `<path fill="${l.col}" d="M${x(i)-bw/2},${y0-(j?2:0)} V${y1+Math.min(4,h)} Q${x(i)-bw/2},${y1} ${x(i)-bw/2+Math.min(4,bw/2)},${y1} H${x(i)+bw/2-Math.min(4,bw/2)} Q${x(i)+bw/2},${y1} ${x(i)+bw/2},${y1+Math.min(4,h)} V${y0-(j?2:0)} Z"/>`
+                     : `<rect x="${x(i)-bw/2}" y="${y1}" width="${bw}" height="${h}" fill="${l.col}"/>`; });
+        return out; }).join('')
+      : lines.map(l=>`<polyline fill="none" stroke="${l.col}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" points="${l.vals.map((v,i)=>x(i)+','+y(v)).join(' ')}"/>`
       +`<circle cx="${x(n-1)}" cy="${y(l.vals[n-1])}" r="4" fill="${l.col}" stroke="var(--card)" stroke-width="2"/>`).join('');
-    box.innerHTML=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="누적 씨앗 그래프">${g}${paths}<line class="xh" x1="0" x2="0" y1="${P.t}" y2="${H-P.b}" stroke="var(--faint)" stroke-dasharray="3 3" style="display:none"/><g class="hd"></g></svg><div class="tip"></div>`;
+    const label = bar ? (S.seedMode==='month'?'달마다 심은 씨앗 막대 그래프':'주마다 심은 씨앗 막대 그래프') : '누적 씨앗 그래프';
+    box.innerHTML=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${label}">${g}${paths}<line class="xh" x1="0" x2="0" y1="${P.t}" y2="${H-P.b}" stroke="var(--faint)" stroke-dasharray="3 3" style="display:none"/><g class="hd"></g></svg><div class="tip"></div>`;
     const svg=box.querySelector('svg'), tip=box.querySelector('.tip'), xh=box.querySelector('.xh'), hd=box.querySelector('.hd');
     const show=e=>{ const r=svg.getBoundingClientRect(), px=(e.clientX-r.left)*(W/r.width);
-      const i=Math.max(0,Math.min(n-1,Math.round((px-P.l)/((W-P.l-P.r)/Math.max(1,n-1)))));
-      xh.setAttribute('x1',x(i)); xh.setAttribute('x2',x(i)); xh.style.display='';
-      hd.innerHTML=lines.map(l=>`<circle cx="${x(i)}" cy="${y(l.vals[i])}" r="4.5" fill="${l.col}" stroke="var(--card)" stroke-width="2"/>`).join('');
-      const add = view==='total' ? s.tot[i] : null;
-      tip.innerHTML=`<b>${s.labels[i]}${(S.seedMode||'week')==='week'?' 주':''}</b>${add!==null?` <span class="faint">+${add}</span>`:''}<br>`+lines.slice().sort((a,b)=>b.vals[i]-a.vals[i]).map(l=>`<i style="background:${l.col}"></i>${esc(l.name)} ${l.vals[i]}${view==='area'&&s.per[i][l.name]?` <span class="faint">+${s.per[i][l.name]}</span>`:''}`).join('<br>');
+      const i=Math.max(0,Math.min(n-1, bar ? Math.floor((px-P.l)/slot) : Math.round((px-P.l)/((W-P.l-P.r)/Math.max(1,n-1)))));
+      if (bar) { xh.style.display='none'; hd.innerHTML=`<rect x="${x(i)-slot/2}" y="${P.t}" width="${slot}" height="${H-P.t-P.b}" fill="var(--ink)" opacity=".06"/>`; }
+      else { xh.setAttribute('x1',x(i)); xh.setAttribute('x2',x(i)); xh.style.display='';
+        hd.innerHTML=lines.map(l=>`<circle cx="${x(i)}" cy="${y(l.vals[i])}" r="4.5" fill="${l.col}" stroke="var(--card)" stroke-width="2"/>`).join(''); }
+      const add = bar ? (view==='area' ? stackTop[i] : null) : (view==='total' ? s.tot[i] : null);
+      tip.innerHTML=`<b>${s.labels[i]}${(S.seedMode||'week')==='week'?' 주':''}</b>${add!==null?` <span class="faint">${bar?'합계 '+add:'+'+add}</span>`:''}<br>`+lines.slice().sort((a,b)=>b.vals[i]-a.vals[i]).map(l=>`<i style="background:${l.col}"></i>${esc(l.name)} ${l.vals[i]}${!bar&&view==='area'&&s.per[i][l.name]?` <span class="faint">+${s.per[i][l.name]}</span>`:''}`).join('<br>');
       tip.style.display='block'; const tx=x(i)*(r.width/W); tip.style.left=Math.max(0,Math.min(r.width-tip.offsetWidth, tx+10 > r.width-tip.offsetWidth ? tx-tip.offsetWidth-10 : tx+10))+'px'; tip.style.top='4px'; };
     const hide=()=>{ tip.style.display='none'; xh.style.display='none'; hd.innerHTML=''; };
     svg.addEventListener('pointermove',show); svg.addEventListener('pointerdown',show); svg.addEventListener('pointerleave',hide);
@@ -1035,6 +1048,7 @@ document.addEventListener('click', async e => {
   if (ds.expand){ S.expand[ds.expand]=!S.expand[ds.expand]; render(); return; }
   if (ds.seed){ const i=ds.seed.indexOf('|'); tapSeed(ds.seed.slice(0,i), ds.seed.slice(i+1)); return; }
   if (ds.smode){ S.seedMode=ds.smode; try{ localStorage.setItem('seed_mode', ds.smode); }catch(_){} const y=window.scrollY; render(); window.scrollTo(0,y); return; }
+  if (ds.skind){ S.seedKind=ds.skind; try{ localStorage.setItem('seed_kind', ds.skind); }catch(_){} const y=window.scrollY; render(); window.scrollTo(0,y); return; }
   if (ds.sview){ S.seedView=ds.sview; const y=window.scrollY; render(); window.scrollTo(0,y); return; }
   if (ds.soff){ S.seedOff=S.seedOff||{}; S.seedOff[ds.soff]=!S.seedOff[ds.soff]; const y=window.scrollY; render(); window.scrollTo(0,y); return; }
   if (t.id==='seed-edit'){ seedEditSheet(); return; }
@@ -1155,7 +1169,7 @@ document.addEventListener('toggle', e => { const c=e.target.classList; if (!c) r
   if (c.contains('track')) { S.trackOpen = e.target.open; try{ localStorage.setItem('track_open', e.target.open?'1':'0'); }catch(_){} const f=e.target.querySelector('summary .faint'); if(f) f.textContent=`(눌러서 ${e.target.open?'접기':'펴기'})`; }
 }, true);
 try { if (localStorage.getItem('track_open')==='0') S.trackOpen=false; if (localStorage.getItem('seed_open')==='0') S.seedOpen=false;
-  const sm=localStorage.getItem('seed_mode'); if (sm) S.seedMode=sm; } catch(_){}
+  const sm=localStorage.getItem('seed_mode'); if (sm) S.seedMode=sm; const sk=localStorage.getItem('seed_kind'); if (sk) S.seedKind=sk; } catch(_){}
 window.addEventListener('resize', () => { clearTimeout(window.__rs); window.__rs=setTimeout(drawSeedCharts, 150); });
 document.addEventListener('input', e => {
   const t=e.target, ds=t.dataset;
