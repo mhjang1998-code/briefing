@@ -31,9 +31,9 @@ const SCHEMA = {
   comments: { sheet: '댓글', key: 'id', bools: ['seen'], cols: [
     ['id', 'id'], ['targetType', '대상'], ['targetId', '대상id'], ['by', '작성자'], ['text', '내용'],
     ['createdAt', '작성시각'], ['seen', '확인']] },
-  schedules: { sheet: '일정', key: 'id', bools: ['done'], cols: [
+  schedules: { sheet: '일정', key: 'id', bools: ['done', 'recurring'], cols: [
     ['id', 'id'], ['title', '제목'], ['date', '날짜'], ['time', '시간'], ['done', '완료'], ['source', '출처'],
-    ['memoId', '메모id'], ['note', '비고'], ['createdAt', '작성시각']] },
+    ['memoId', '메모id'], ['note', '비고'], ['createdAt', '작성시각'], ['gcalId', '구글캘린더id'], ['recurring', '반복']] },
   todos: { sheet: '할일', key: 'id', bools: ['done'], cols: [
     ['id', 'id'], ['text', '내용'], ['done', '완료'], ['source', '출처'], ['memoId', '메모id'],
     ['createdAt', '작성시각'], ['doneAt', '완료시각']] },
@@ -48,7 +48,8 @@ const SCHEMA = {
 const CATEGORIES = ['일정', '할 일', '분석', '결정', '생각', '기타'];
 const DEFAULT_DOMAINS = ['금융', '부동산', '인사이트', '전공', '사업', '기타'];
 const TABS = ['today', 'memo', 'plan', 'history', 'watch', 'manage'];
-const SCHEMA_VERSION = 'v6';
+const SCHEMA_VERSION = 'v8';
+const CAL_PAST = 35, CAL_FUTURE = 120;   // 구글 캘린더와 맞추는 기간(일)
 const DEFAULT_SEEDS = ['전공', '영어', '금융', '부동산', '연애', '통제'];
 const SEED_MAX = 3;
 // 화면에서 직접 고칠 수 있는 칸 (앞으로 화면 기능을 늘려도 서버를 다시 붙여넣지 않도록 넓게 둔다)
@@ -78,7 +79,7 @@ function ensureSetup_() {
   if (ss_().getSheetByName('설정') && PropertiesService.getScriptProperties().getProperty('API_KEY')) {
     const cache = CacheService.getScriptCache();
     if (cache.get('schema') === SCHEMA_VERSION) return;
-    ensureSheet_('items'); ensureSheet_('seeds'); ensureColumns_('watchlist'); ensureColumns_('memos'); ensureColumns_('briefs'); ensureColumns_('items');
+    ensureSheet_('items'); ensureSheet_('seeds'); ensureColumns_('watchlist'); ensureColumns_('memos'); ensureColumns_('briefs'); ensureColumns_('items'); ensureColumns_('schedules');
     cache.put('schema', SCHEMA_VERSION, 21600);
     return;
   }
@@ -428,6 +429,7 @@ function watchlist_() {
 }
 
 function apiPull_() {
+  calSync_(true);
   const idx = commentsIndex_();
   const memos = readAll_('memos').map(m => attach_('memo', m, idx));
   const briefs = readAll_('briefs').map(b => attach_('brief', b, idx))
@@ -520,6 +522,7 @@ function apiPush_(body) {
       .map(s => ({ id: s.id || newId_('s'), title: s.title, date: s.date, time: s.time || '', done: false,
         source: 'claude', memoId: s.memoId || '', note: s.note || '', createdAt: now }));
     append_('schedules', add); counts.schedules = add.length;
+    if (add.length) calSync_(true);
   }
 
   if (body.todos && body.todos.length) {
@@ -606,6 +609,97 @@ function uiDispatch_(body) {
   return { ok: true, data: fn.apply(null, [body.key].concat(body.args || [])) };
 }
 
+/* ───────────── 구글 캘린더 (기본 캘린더와 양방향) ─────────────
+ * - 캘린더 일정은 '일정' 시트에 구글캘린더id 와 함께 비춰 둔다(source=gcal). 캘린더에서 바꾸거나 지우면 다음 동기화 때 반영.
+ * - 앱·메모에서 생긴 일정(오늘 이후, 미완료)은 캘린더에 만들어 연결한다.
+ * - 완료(✓): 캘린더 제목 앞에 "✓ ". 반복 일정은 시리즈 전체가 바뀔 수 있어 앱에서만 완료 표시한다. */
+function cal_() { return CalendarApp.getDefaultCalendar(); }
+function ymd_(d) { return Utilities.formatDate(d, TZ, 'yyyy-MM-dd'); }
+function evKey_(ev) { return ev.isRecurringEvent() ? ev.getId() + '@' + ymd_(ev.isAllDayEvent() ? ev.getAllDayStartDate() : ev.getStartTime()) : ev.getId(); }
+function evFields_(ev) {
+  const t = String(ev.getTitle() || ''), all = ev.isAllDayEvent(), st = all ? ev.getAllDayStartDate() : ev.getStartTime();
+  return { title: t.replace(/^✓\s*/, '') || '(제목 없음)', date: ymd_(st), time: all ? '' : Utilities.formatDate(st, TZ, 'HH:mm'),
+    done: /^✓/.test(t), recurring: ev.isRecurringEvent() };
+}
+function withLockIf_(fn) { return LockService.getScriptLock().hasLock() ? fn() : withLock_(fn); }
+/** force=false 면 1분에 한 번만. 실패하면 오류 문구를 돌려준다(권한 미승인 등) */
+function calSync_(force) {
+  const cache = CacheService.getScriptCache();
+  if (!force && cache.get('calSync')) return cache.get('calErr') || '';
+  let err = '';
+  try {
+    withLockIf_(() => {
+      const cal = cal_(), now = Date.now(), today = today_();
+      const from = new Date(now - CAL_PAST * 864e5), to = new Date(now + CAL_FUTURE * 864e5), fromS = ymd_(from), toS = ymd_(to);
+      const byKey = {}; cal.getEvents(from, to).forEach(ev => { byKey[evKey_(ev)] = ev; });
+      const rows = readAll_('schedules'), linked = {}, del = [];
+      rows.forEach(r => {
+        if (!r.gcalId) return;
+        let ev = byKey[r.gcalId];
+        if (!ev && !r.recurring) {  // 기간 밖으로 옮겼는지 확인(기간 안인데 목록에 없으면 지워진 것)
+          try { const a = cal.getEventById(r.gcalId); if (a) { const f = evFields_(a); if (f.date < fromS || f.date > toS) ev = a; } } catch (e) {}
+        }
+        if (!ev) { if (r.recurring || (String(r.date) >= fromS && String(r.date) <= toS)) del.push(r._row); return; }
+        linked[r.gcalId] = 1;
+        const f = evFields_(ev), p = {};
+        ['title', 'date', 'time'].forEach(k => { if (String(r[k]) !== String(f[k])) p[k] = f[k]; });
+        if (!f.recurring && r.done !== f.done) p.done = f.done;
+        if (r.recurring !== f.recurring) p.recurring = f.recurring;
+        if (Object.keys(p).length) patchRow_('schedules', r._row, p);
+      });
+      // 캘린더에만 있는 일정 → 같은 제목·날짜의 앱 일정이 있으면 연결, 없으면 새로 들인다
+      const add = [];
+      Object.keys(byKey).forEach(k => {
+        if (linked[k]) return;
+        const f = evFields_(byKey[k]);
+        const twin = rows.find(r => !r.gcalId && r.title === f.title && String(r.date) === f.date && del.indexOf(r._row) < 0);
+        if (twin) { twin.gcalId = k; patchRow_('schedules', twin._row, { gcalId: k, time: twin.time || f.time, recurring: f.recurring }); return; }
+        add.push({ id: newId_('s'), title: f.title, date: f.date, time: f.time, done: f.done, source: 'gcal', memoId: '', note: '',
+          createdAt: nowIso_(), gcalId: k, recurring: f.recurring });
+      });
+      // 앱·메모에서 생긴 일정 → 캘린더에 만든다(오늘 이후, 미완료)
+      rows.forEach(r => {
+        if (r.gcalId || r.done || del.indexOf(r._row) >= 0 || String(r.date) < today || String(r.date) > toS) return;
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(String(r.date))) return;
+        const ev = r.time
+          ? cal.createEvent(r.title, Utilities.parseDate(r.date + ' ' + r.time, TZ, 'yyyy-MM-dd HH:mm'),
+              new Date(+Utilities.parseDate(r.date + ' ' + r.time, TZ, 'yyyy-MM-dd HH:mm') + 3600e3), { description: '아침 브리핑 앱에서 추가' + (r.note ? ' · ' + r.note : '') })
+          : cal.createAllDayEvent(r.title, Utilities.parseDate(r.date + ' 12:00', TZ, 'yyyy-MM-dd HH:mm'), { description: '아침 브리핑 앱에서 추가' + (r.note ? ' · ' + r.note : '') });
+        patchRow_('schedules', r._row, { gcalId: ev.getId() });
+      });
+      if (add.length) append_('schedules', add);
+      const sh = sheetOf_('schedules'); del.sort((a, b) => b - a).forEach(n => sh.deleteRow(n)); if (del.length) invalidate_('schedules');
+    });
+  } catch (e) { err = String(e && e.message || e); }
+  cache.put('calSync', '1', 60); cache.put('calErr', err, 60);
+  return err;
+}
+/** 앱에서 고친 일정을 캘린더에 반영 (반복 일정은 제외) */
+function calApply_(id) {
+  const r = findBy_('schedules', 'id', id);
+  if (!r || !r.gcalId || r.recurring) return;
+  try {
+    const ev = cal_().getEventById(r.gcalId); if (!ev) return;
+    const t = (r.done ? '✓ ' : '') + r.title; if (ev.getTitle() !== t) ev.setTitle(t);
+    if (r.time) {
+      const st = Utilities.parseDate(r.date + ' ' + r.time, TZ, 'yyyy-MM-dd HH:mm');
+      const dur = ev.isAllDayEvent() ? 3600e3 : (+ev.getEndTime() - +ev.getStartTime());
+      if (ev.isAllDayEvent() || +ev.getStartTime() !== +st) ev.setTime(st, new Date(+st + dur));
+    } else if (!ev.isAllDayEvent() || ymd_(ev.getAllDayStartDate()) !== String(r.date)) {
+      ev.setAllDayDate(Utilities.parseDate(r.date + ' 12:00', TZ, 'yyyy-MM-dd HH:mm'));
+    }
+  } catch (e) { Logger.log('calApply_ ' + e); }
+}
+function calDelete_(r) {
+  if (!r || !r.gcalId) return;
+  if (r.recurring) throw new Error('반복 일정은 구글 캘린더에서 지워 주세요.');
+  try { const ev = cal_().getEventById(r.gcalId); if (ev) ev.deleteEvent(); } catch (e) { Logger.log('calDelete_ ' + e); }
+}
+function noRecurEdit_(id, patch) {
+  const r = findBy_('schedules', 'id', id);
+  if (r && r.recurring && ['title', 'date', 'time'].some(k => k in patch)) throw new Error('반복 일정은 구글 캘린더에서 고쳐 주세요.');
+}
+
 /* 🌱 씨앗: 날짜·영역마다 0~SEED_MAX 개. 0이면 행을 지운다. 빠른 응답을 위해 씨앗만 돌려준다 */
 function uiSetSeed(key, date, name, count) {
   checkKey_(key);
@@ -637,6 +731,7 @@ function uiRenameSeed(key, from, to) {
 
 function uiLoad(key) {
   checkKey_(key);
+  const calError = calSync_(false);
   const idx = commentsIndex_();
   const briefs = readAll_('briefs').map(b => attach_('brief', b, idx))
     .sort((a, b) => String(b.date).localeCompare(String(a.date))).slice(0, 90);
@@ -651,7 +746,7 @@ function uiLoad(key) {
     .sort((a, b) => String(b.date).localeCompare(String(a.date)) || String(a.createdAt).localeCompare(String(b.createdAt)))
     .slice(0, 800);
   return { today: today_(), sections: SECTIONS, categories: CATEGORIES, domains: domains_(), tabs: tabs_(), folders: folders_(),
-    briefs, memos, items, schedules, todos, seeds: seeds_(), seedList: seedList_(), seedMax: SEED_MAX,
+    briefs, memos, items, schedules, todos, calError, seeds: seeds_(), seedList: seedList_(), seedMax: SEED_MAX,
     watchlist: { items: watchlist_(), prompt: getSetting_('지표공통프롬프트') } };
 }
 
@@ -767,7 +862,9 @@ const TYPE_SHEET = { item: 'items', memo: 'memos', schedule: 'schedules', todo: 
 function uiSetEntry(key, type, id, patch) {
   checkKey_(key);
   const name = TYPE_SHEET[type] || 'memos', p = cleanPatch_(name, patch);
-  withLock_(() => { const o = findBy_(name, 'id', id); if (o && Object.keys(p).length) patchRow_(name, o._row, p); });
+  withLock_(() => { const o = findBy_(name, 'id', id); if (o && Object.keys(p).length) {
+    if (name === 'schedules') noRecurEdit_(id, p);
+    patchRow_(name, o._row, p); if (name === 'schedules') calApply_(id); } });
   return uiLoad(key);
 }
 
@@ -776,7 +873,7 @@ function uiSetEntries(key, list) {
   checkKey_(key);
   withLock_(() => (list || []).slice(0, 300).forEach(x => {
     const name = TYPE_SHEET[x.type] || 'memos', p = cleanPatch_(name, x.patch);
-    const o = findBy_(name, 'id', x.id); if (o && Object.keys(p).length) patchRow_(name, o._row, p);
+    const o = findBy_(name, 'id', x.id); if (o && Object.keys(p).length) { patchRow_(name, o._row, p); if (name === 'schedules') calApply_(x.id); }
   }));
   return uiLoad(key);
 }
@@ -850,10 +947,11 @@ function uiSaveSchedule(key, s) {
   withLock_(() => {
     if (s.id) {
       const o = findBy_('schedules', 'id', s.id);
-      if (o) { patchRow_('schedules', o._row, { title: s.title, date: s.date, time: s.time || '' }); return; }
+      if (o) { noRecurEdit_(s.id, s); patchRow_('schedules', o._row, { title: s.title, date: s.date, time: s.time || '' }); calApply_(s.id); return; }
     }
     append_('schedules', [{ id: newId_('s'), title: s.title, date: s.date, time: s.time || '', done: false,
       source: 'user', memoId: '', note: '', createdAt: nowIso_() }]);
+    calSync_(true);
   });
   return uiLoad(key);
 }
@@ -867,13 +965,17 @@ function uiSetDone(key, type, id, done) {
     const patch = { done: !!done };
     if (name === 'todos') patch.doneAt = done ? nowIso_() : '';
     patchRow_(name, o._row, patch);
+    if (name === 'schedules') calApply_(id);
   });
   return uiLoad(key);
 }
 
 function uiDelete(key, type, id) {
   checkKey_(key);
-  withLock_(() => deleteBy_(type === 'todo' ? 'todos' : 'schedules', 'id', id));
+  withLock_(() => {
+    if (type !== 'todo') calDelete_(findBy_('schedules', 'id', id));
+    deleteBy_(type === 'todo' ? 'todos' : 'schedules', 'id', id);
+  });
   return uiLoad(key);
 }
 
@@ -952,7 +1054,8 @@ function uiQuotes(key, symbols) {
 
 /** 편집기에서 한 번 실행해 "외부 사이트 접속" 권한을 승인하는 용도 (종목 검색·시세에 필요) */
 function authorize() {
+  Logger.log('구글 캘린더: ' + CalendarApp.getDefaultCalendar().getName() + ' 연결 확인');
   const code = UrlFetchApp.fetch('https://ac.stock.naver.com/ac?target=stock&q=' + encodeURIComponent('한미'),
     { muteHttpExceptions: true }).getResponseCode();
-  Logger.log('권한 승인 완료 (응답 ' + code + '). 이제 앱에서 종목 검색·시세를 쓸 수 있습니다.');
+  Logger.log('권한 승인 완료 (응답 ' + code + '). 이제 앱에서 종목 검색·시세·구글 캘린더를 쓸 수 있습니다.');
 }
