@@ -58,7 +58,16 @@ b.k{font-weight:700}
 .ind .chgs span{background:var(--chip);border-radius:7px;padding:2px 7px;color:var(--sub)}
 .ind .chgs b{font-weight:700} .ind .chgs .up b{color:var(--up)} .ind .chgs .down b{color:var(--down)}
 .ind .note{grid-column:1/-1;font-size:13px;color:var(--sub)}
-.ind.dr{grid-template-columns:18px 1fr auto} .ind.dr .lgrip{grid-row:1/span 9} .ind.dr .chgs,.ind.dr .note{grid-column:2/-1}
+.ind.dr{position:relative;padding-left:22px} .ind.dr .lgrip{position:absolute;left:0;top:calc(50% - 10px)}
+/* ✏️ 카드별 편집: 켜야 ⠿ 손잡이·길이 조절이 보임 (평소엔 깔끔하게) */
+.card>summary{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+.card>summary .sp,.card.bar .sp{flex:1}
+.edbtn{padding:2px 9px;font-size:12px} .edbtn.on{background:var(--accent);color:#fff}
+.card.editing{outline:2px dashed color-mix(in srgb,var(--k,var(--accent)) 45%,transparent);outline-offset:2px}
+.cg{margin-right:2px}
+.cardsdrag .tcard>details>:not(summary),.cardsdrag .tcard[data-litem="brief"]>:not(.bar){display:none}
+.cardsdrag .tcard>.card{margin-bottom:6px}
+@media (max-width:520px){ .card.bar>.faint{display:none} }
 .lgrip{cursor:grab;touch-action:none;user-select:none;color:var(--faint);font-size:16px;line-height:20px;padding:0 2px;flex:none}
 .lph{opacity:.35;outline:2px dashed var(--accent);outline-offset:-2px;border-radius:8px}
 .lghost{position:fixed;z-index:50;pointer-events:none;background:var(--card);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.25);padding:4px 10px;opacity:.95;margin:0}
@@ -426,9 +435,12 @@ async function quick(mutate, fn, ...args){
 }
 const nowIso = () => new Date().toISOString();
 const findEntry = (type, id) => type==='item' ? (S.data.items||[]).find(i=>i.id===id) : S.data.memos.find(m=>m.id===id);
+const ED = k => !!(S.ed||{})[k];
+const editBtn = k => `<button class="tbtn edbtn ${ED(k)?'on':''}" data-ed="${k}" title="${ED(k)?'편집 끝':'순서·길이 편집'}">${ED(k)?'완료':'✏️'}</button>`;
+const cardGrip = k => ED(k) ? '<span class="lgrip cg" title="끌어서 카드 순서 바꾸기">⠿</span>' : '';
 /* ── ↕ 카드 길이 조절: rz(키, 내용) → 내용 아래 손잡이. 높이는 이 기기(localStorage rz_h)에 저장 ── */
-function rz(k, inner, cls){ const h=(S.rz||{})[k]||0;
-  return `<div class="rzb ${cls||''}" data-rz="${esc(k)}" style="${h?`max-height:${h}px`:''}">${inner}</div><div class="rzh" data-rzk="${esc(k)}" title="끌어서 길이 조절 · 두 번 누르면 원래대로"><i></i></div>`; }
+function rz(k, inner, cls, show){ const h=(S.rz||{})[k]||0;
+  return `<div class="rzb ${cls||''}" data-rz="${esc(k)}" style="${h?`max-height:${h}px`:''}">${inner}</div>${show?`<div class="rzh" data-rzk="${esc(k)}" title="끌어서 길이 조절 · 두 번 누르면 원래대로"><i></i></div>`:''}`; }
 function saveRz(){ const ks=Object.keys(S.rz||{}); if (ks.length>300) ks.slice(0,ks.length-300).forEach(k=>delete S.rz[k]); try{ localStorage.setItem('rz_h', JSON.stringify(S.rz||{})); }catch(_){} }
 /* ── ⠿ 체크리스트 끌어서 옮기기(항목·칸) · 길이 조절 (마우스·터치 공통) ── */
 let CK=null, CKR=null, CB=null, LD=null;
@@ -443,9 +455,13 @@ document.addEventListener('pointerdown', e => {
     const ghost=row.cloneNode(true); ghost.classList.add('ckghost'); Object.assign(ghost.style,{width:r.width+'px',left:r.left+'px',top:r.top+'px'}); document.body.appendChild(ghost);
     row.classList.add('ckph'); CK={row, ghost, dy:e.clientY-r.top}; return; }
   const lg = e.target.closest && e.target.closest('.lgrip');
-  if (lg){ const el=lg.closest('[data-litem]'), box=el && el.parentNode; if (!box || !box.dataset.lkind) return; e.preventDefault(); const r=el.getBoundingClientRect();
+  if (lg){ const el=lg.closest('[data-litem]'), box=el && el.parentNode; if (!box || !box.dataset.lkind) return; e.preventDefault();
+    // 카드 순서: 모든 카드를 제목 줄로 접어 짧은 목록에서 옮김. 접히며 위치가 바뀌니 손가락과의 거리(off)를 보정
+    let off=0; if (box.dataset.lkind==='cards'){ box.classList.add('cardsdrag'); window.scrollBy(0, el.getBoundingClientRect().top - e.clientY + 14); off = el.getBoundingClientRect().top + 14 - e.clientY; }
+    const r=el.getBoundingClientRect();
     const ghost=el.cloneNode(true); ghost.classList.add('lghost'); Object.assign(ghost.style,{width:r.width+'px',left:r.left+'px',top:r.top+'px'}); document.body.appendChild(ghost);
-    el.classList.add('lph'); LD={el, box, ghost, dy:e.clientY-r.top}; return; }
+    if (box.dataset.lkind==='cards') Object.assign(ghost.style,{maxHeight:'52px',overflow:'hidden'});
+    el.classList.add('lph'); LD={el, box, ghost, off, dy:Math.min(e.clientY+off-r.top, 30)}; return; }
   const bg = e.target.closest && e.target.closest('.bgrip');
   if (bg){ e.preventDefault(); const el=bg.closest('.bucket'), r=el.getBoundingClientRect();
     const ghost=el.cloneNode(true); ghost.classList.add('bghost'); Object.assign(ghost.style,{width:r.width+'px',left:r.left+'px',top:r.top+'px',maxHeight:'160px',overflow:'hidden'}); document.body.appendChild(ghost);
@@ -459,9 +475,9 @@ document.addEventListener('pointermove', e => {
     if (list){ const rows=[...list.querySelectorAll('.ck:not(.ckph)')], before=rows.find(r=>{ const b=r.getBoundingClientRect(); return e.clientY < b.top + b.height/2; });
       const emp=list.querySelector('.empty-b'); if (emp) emp.remove(); if (CK.row.nextSibling!==before || CK.row.parentNode!==list) list.insertBefore(CK.row, before||null); }
     edgeScroll(e, el); return; }
-  if (LD){ e.preventDefault(); LD.ghost.style.top=(e.clientY-LD.dy)+'px';
+  if (LD){ e.preventDefault(); const Y=e.clientY+LD.off; LD.ghost.style.top=(Y-LD.dy)+'px';
     const sib=[...LD.box.children].filter(x=>x.dataset.litem!=null && x!==LD.el);
-    const before=sib.find(b=>{ const r=b.getBoundingClientRect(); return e.clientY < r.top + r.height/2; });
+    const before=sib.find(b=>{ const r=b.getBoundingClientRect(); return Y < r.top + r.height/2; });
     if (LD.el.nextSibling!==before) LD.box.insertBefore(LD.el, before||null);
     edgeScroll(e, LD.el); return; }
   if (CB){ e.preventDefault(); CB.ghost.style.top=(e.clientY-CB.dy)+'px';
@@ -476,7 +492,8 @@ document.addEventListener('pointerup', () => {
     const L=layout(); L.items={};
     document.querySelectorAll('.checklist .bucket[data-bucket]').forEach(b => { L.items[b.dataset.bucket]=[...b.querySelectorAll('.blist .ck')].map(r=>r.dataset.ck); });
     saveLayout(L); const y=window.scrollY; render(); window.scrollTo(0,y); return; }
-  if (LD){ const {el, box, ghost}=LD; LD=null; ghost.remove(); el.classList.remove('lph');
+  if (LD){ const {el, box, ghost}=LD; LD=null; ghost.remove(); el.classList.remove('lph'); S.noClick=Date.now();
+    if (box.dataset.lkind==='cards'){ box.classList.remove('cardsdrag'); const L=layout(); L.cards=[...box.children].map(x=>x.dataset.litem).filter(Boolean); saveLayout(L); const y=window.scrollY; render(); window.scrollTo(0,y); return; }
     saveWlOrder(box.dataset.lkind, [...box.children].filter(x=>x.dataset.litem!=null).map(x=>x.dataset.litem), el.dataset.litem); return; }
   if (CB){ const {el, ghost}=CB; CB=null; ghost.remove(); el.classList.remove('bph');
     const L=layout(), ord=[...document.querySelectorAll('.checklist .bucket[data-bid]')].map(b=>b.dataset.bid);
@@ -486,6 +503,7 @@ document.addEventListener('pointerup', () => {
 });
 document.addEventListener('dblclick', e => { const h=e.target.closest && e.target.closest('.rzh'); if (h){ delete (S.rz||{})[h.dataset.rzk]; saveRz(); const y=window.scrollY; render(); window.scrollTo(0,y); } });
 
+document.addEventListener('click', e => { if (S.noClick && Date.now()-S.noClick < 400) { e.preventDefault(); e.stopPropagation(); } }, true);
 async function act(fn, ...args){ toast('저장 중…'); const d = await call(fn, ...args); S.data = d; render(); toast('저장됨'); return d; }
 
 function parseDate(s){ const [y,m,d]=String(s).split('-').map(Number); return new Date(y, m-1, d); }
@@ -572,11 +590,12 @@ function renderIndicators(text, drag){
       <div class="chgs"><span class="${cls}">전일 <b>${esc(m[3])}</b></span><span class="${c5}">1주 <b>${esc(wTxt)}</b></span></div>`});
   });
   if (!drag) return blocks.map(b=>`<div class="ind">${b.head}${b.notes}</div>`).join('');
+  const dr = drag==='drag';
   // 오늘 카드: 📈 지표 탭 순서대로 보이고 ⠿ 로 끌어 바꾸면 지표 탭 순서도 같이 바뀜 (모르는 줄은 제자리)
   const ord={}; ((S.data.watchlist||{}).items||[]).forEach((w,i)=>{ ord[w.label]=i; });
   const slots=[], mine=[]; blocks.forEach((b,i)=>{ if (ord[b.name]!=null){ slots.push(i); mine.push(b); } });
   mine.sort((a,b)=>ord[a.name]-ord[b.name]); slots.forEach((p,k)=>{ blocks[p]=mine[k]; });
-  return `<div data-lkind="ind">${blocks.map(b=> ord[b.name]!=null
+  return `<div data-lkind="ind">${blocks.map(b=> dr && ord[b.name]!=null
     ? `<div class="ind dr" data-litem="${esc(b.name)}"><span class="lgrip" title="끌어서 순서 바꾸기">⠿</span>${b.head}${b.notes}</div>`
     : `<div class="ind">${b.head}${b.notes}</div>`).join('')}</div>`;
 }
@@ -615,7 +634,7 @@ function itemCard(it, mode){
     <div class="ihead">${!seen&&it.seenAt?'<span class="chip unseen">새 답글</span>':''}<span class="chip sec">${esc(it.section||'브리핑')}</span>
       ${it.study?`<span class="chip dom" style="margin-left:auto">🎓 ${esc(it.domain||'')}${it.folder?' › '+esc(it.folder):''}</span>`:''}
       ${it.hasNewComment?'<span class="chip new">답변 대기</span>':''}</div>
-    ${rz('it:'+it.id, `${it.title?`<div class="ititle">${esc(it.title)}</div>`:''}${body}`)}
+    ${rz('it:'+it.id, `${it.title?`<div class="ititle">${esc(it.title)}</div>`:''}${body}`, '', mode!=='record' && ED('brief'))}
     <div class="tools">${btn}<button class="tbtn" data-toggle="${esc(k)}" data-state="${open?1:0}">💬 코멘트 ${nc||''}</button>
       <button class="tbtn ${it.pinned?'trk':''}" data-track="item|${esc(it.id)}|${it.pinned?0:1}">🎯${it.pinned?' 추적 중':' 추적'}</button>
       <button class="tbtn" data-study="item|${esc(it.id)}">🎓 공부로</button>
@@ -631,11 +650,11 @@ function trackedList(){
 function trackCard(){
   const list=trackedList(), b=S.data.briefs.find(x=>x.sec_tracking && String(x.sec_tracking).trim());
   if (!list.length && !b) return '';
-  return `<details class="card track" ${S.trackOpen===false?'':'open'}><summary>🎯 추적 중 ${list.length}건 <span class="faint">(눌러서 ${S.trackOpen===false?'펴기':'접기'})</span></summary>${rz('track', `
+  return `<details class="card track ${ED('track')?'editing':''}" ${S.trackOpen===false?'':'open'}><summary>${cardGrip('track')}🎯 추적 중 ${list.length}건<span class="sp"></span>${editBtn('track')}</summary>${rz('track', `
     ${b?`<div class="faint" style="margin:2px 0 4px">${md(b.date)} 진행 상황</div>${renderLines(b.sec_tracking)}`:''}
     ${list.length?`<div style="margin-top:10px">${list.map(t=>`<div class="trow"><div class="tx"><div class="meta">${t.type==='memo'?'내 메모':'답변'} · ${md(t.date)}${t.o.domain?' · '+esc(t.o.domain):''}</div><div class="tt">${esc(t.title)}</div></div>
       <button class="tbtn" data-track="${t.type}|${esc(t.id)}|0">추적 해제</button></div>`).join('')}</div>`
-      :`<div class="faint" style="margin-top:8px">추적 중인 항목이 없어요. 메모나 답변 카드의 🎯 버튼을 누르면 매일 진행 상황을 챙겨 드려요.</div>`}`)}</details>`;
+      :`<div class="faint" style="margin-top:8px">추적 중인 항목이 없어요. 메모나 답변 카드의 🎯 버튼을 누르면 매일 진행 상황을 챙겨 드려요.</div>`}`, '', ED('track'))}</details>`;
 }
 /* ── 🌱 씨앗: 날짜·영역마다 0~3개. 탭할 때마다 +1, 3 다음은 0 ── */
 const SEED_COLORS = ['--s1','--s2','--s3','--s4','--s5','--s6','--s7','--s8'];
@@ -682,8 +701,8 @@ function seedCard(where){
     <div class="seg"><button data-sview="total" class="${view==='total'?'on':''}">합계</button><button data-sview="area" class="${view==='area'?'on':''}">영역별</button></div></div>`;
   const legend = view==='area' ? `<div class="slegend">${(d.seedList||[]).slice(0,8).map(n=>`<button class="${(S.seedOff||{})[n]?'off':''}" data-soff="${esc(n)}"><i style="background:${seedColor(n)}"></i>${esc(n)}</button>`).join('')}</div>` : '';
   const chart = `${ctrls}<div class="schart" data-schart="1"></div>${legend}<div class="faint" style="margin-top:4px">${mode==='week'?'최근 12주':'최근 12개월'} ${kind==='cum'?'누적 씨앗':(mode==='week'?'주마다 심은 씨앗':'달마다 심은 씨앗')} · 누르거나 올리면 수치</div>`;
-  if (where==='today') return `<details class="card seedcard" ${S.seedOpen===false?'':'open'}><summary>🌱 씨앗 ${sum(()=>true)}개 쌓는 중 <span class="faint">(눌러서 ${S.seedOpen===false?'펴기':'접기'})</span></summary>
-    ${rz('seed', `${stats}${chart}<div style="margin-top:12px"><b style="font-size:13px">오늘 심은 씨앗</b><div style="margin-top:6px">${seedButtons(today)}</div></div>`)}</details>`;
+  if (where==='today') return `<details class="card seedcard ${ED('seed')?'editing':''}" ${S.seedOpen===false?'':'open'}><summary>${cardGrip('seed')}🌱 씨앗 ${sum(()=>true)}개 쌓는 중<span class="sp"></span>${editBtn('seed')}</summary>
+    ${rz('seed', `${stats}${chart}<div style="margin-top:12px"><b style="font-size:13px">오늘 심은 씨앗</b><div style="margin-top:6px">${seedButtons(today)}</div></div>`, '', ED('seed'))}</details>`;
   return `<section class="card"><h2>🌱 씨앗 성장</h2>${stats}${chart}</section>`;
 }
 function drawSeedCharts(){
@@ -789,38 +808,37 @@ function ckRow(x, drag){
   const o=x.o, title = x.type==='schedule' ? o.title : o.text;
   const meta = x.type==='schedule' ? `${md(o.date)}${o.time?' '+esc(o.time):''}${o.gcalId?' · 📅':''}${o.recurring?' 🔁':''}`
                                    : `${o.source==='claude'?'브리핑에서 추가':'직접 추가'} · 마감 없음`;
-  return `<div class="ck" data-ck="${esc(x.k)}">${drag?'<span class="grip" title="끌어서 옮기기">⠿</span>':'<span class="grip off"></span>'}
+  return `<div class="ck" data-ck="${esc(x.k)}">${drag==='pad'?'<span class="grip off"></span>':drag?'<span class="grip" title="끌어서 옮기기">⠿</span>':''}
     <input type="checkbox" class="chk" data-done="${x.type}:${esc(o.id)}">
     <div class="body">${dTag(x.date)} <span class="tt">${linkify(title)}</span><div class="meta">${meta}</div></div>
     <button class="tbtn" ${x.type==='schedule'?`data-edit-s="${esc(o.id)}"`:`data-edit-t="${esc(o.id)}"`}>편집</button></div>`;
 }
 const bIcon = n => { const m=String(n).match(/^\s*(\p{Extended_Pictographic}️?)/u); return m ? m[1] : esc(String(n).trim().slice(0,4)); };
 function checklistCard(){
-  const d=S.data, {late, out, L, lateOn} = checkBuckets(), ed=S.checkEdit, nNormal=out.length;
+  const d=S.data, {late, out, L, lateOn} = checkBuckets(), ed=ED('check'), nNormal=out.length;
   const warn = d.calError ? `<div class="faint" style="color:var(--warn);margin-bottom:6px">📅 구글 캘린더 연결 안 됨 — Apps Script 편집기에서 <b>authorize</b> 함수를 한 번 실행해 권한을 허용해 주세요</div>` : '';
-  const ctl = id => `<span class="bgrip" title="끌어서 칸 순서 바꾸기">⠿</span>`;
+  const ctl = () => ed ? `<span class="bgrip" title="끌어서 칸 순서 바꾸기">⠿</span>` : '';
   const edb = (id, canDel) => ed ? `<button class="tbtn" data-bren="${esc(id)}" title="이름 바꾸기">✏️</button>${canDel?`<button class="tbtn" data-bdel="${esc(id)}" title="칸 삭제">🗑</button>`:''}` : '';
   let ci=0;
   const cards = L.buckets.map(b => {
     if (b.id==='late') return `<div class="bucket late" data-bid="late">
-      <div class="bh">${ctl()}${esc(b.name)} <span class="count">${late.length}</span><span class="sp"></span>${ed?'':'<span class="faint hint" style="font-weight:400;font-size:11px">체크·편집으로 정리</span>'}${edb('late', true)}</div>
-      ${rz('bk:late', late.map(x=>ckRow(x,false)).join('') || '<div class="empty-b">지난 일정 없음 👍</div>')}</div>`;
+      <div class="bh">${ctl()}${esc(b.name)} <span class="count">${late.length}</span><span class="sp"></span>${edb('late', true)}</div>
+      ${rz('bk:late', late.map(x=>ckRow(x, ed?'pad':false)).join('') || '<div class="empty-b">지난 일정 없음 👍</div>', '', ed)}</div>`;
     const o=out.find(x=>x.b.id===b.id), i=ci++;
     return `<div class="bucket" data-bid="${esc(b.id)}" data-bucket="${esc(b.id)}" style="--bk:var(--bk${i%5})">
       <div class="bh">${ctl()}${esc(b.name)} <span class="count">${o.list.length}</span><span class="sp"></span>
         <button class="tbtn" data-badd="${esc(b.id)}" title="이 칸에 할 일 추가">＋</button>${edb(b.id, nNormal>1)}</div>
-      ${rz('bk:'+b.id, `<div class="blist">${o.list.map(x=>ckRow(x,true)).join('') || '<div class="empty-b">⠿ 를 잡고 여기로 끌어다 놓기</div>'}</div>`)}</div>`;
+      ${rz('bk:'+b.id, `<div class="blist">${o.list.map(x=>ckRow(x,ed)).join('') || `<div class="empty-b">${ed?'⠿ 를 잡고 여기로 끌어다 놓기':'비어 있어요'}</div>`}</div>`, '', ed)}</div>`;
   }).join('');
   // 맨 위 요약: 칸별 개수 + 마감 D-3·D-7·D-14 (누적, 날짜 있는 것만)
   const counts = L.buckets.map(b => `<span class="ckc" title="${esc(b.name)}">${bIcon(b.name)} ${b.id==='late'?late.length:out.find(x=>x.b.id===b.id).list.length}</span>`).join('');
   const dd = [].concat(...out.map(o=>o.list)).filter(x=>x.date).map(x=>dayDiff(x.date)).filter(n=>n>=0);
   const dc = n => dd.filter(x=>x<=n).length;
   const dHtml = dd.some(n=>n<=14) ? `<span class="sep">│</span><span class="dtag r">D-3 ${dc(3)}</span><span class="dtag o">D-7 ${dc(7)}</span><span class="dtag y">D-14 ${dc(14)}</span>` : '';
-  return `<details class="card checklist" ${S.checkOpen===false?'':'open'}><summary class="cksum">✅ 체크리스트 ${counts}${dHtml}<span class="sp"></span>
-      <button class="tbtn ${ed?'on':''}" id="check-edit">${ed?'편집 끝':'✏️ 편집'}</button></summary>${warn}
-    <div class="tools" style="margin:0 0 6px"><button class="tbtn" id="todo-new">＋ 할 일</button>
-      ${ed?`<button class="tbtn" id="bucket-add">＋ 칸 추가</button>${lateOn?'':'<button class="tbtn" id="late-on">⚠️ 지난 일정 칸 다시 켜기</button>'}`:''}<span class="faint" style="margin-left:auto">${ed?'✏️ 이름 · 🗑 삭제 · ⠿ 순서':'⠿ 끌어서 옮기기'}</span></div>
-    ${rz('check', cards, 'ckbody')}</details>`;
+  return `<details class="card checklist ${ed?'editing':''}" ${S.checkOpen===false?'':'open'}><summary class="cksum">${cardGrip('check')}✅ 체크리스트 ${counts}${dHtml}<span class="sp"></span>
+      <button class="tbtn edbtn" id="todo-new" title="할 일 추가">＋</button>${editBtn('check')}</summary>${warn}
+    ${ed?`<div class="tools" style="margin:0 0 6px"><button class="tbtn" id="bucket-add">＋ 칸 추가</button>${lateOn?'':'<button class="tbtn" id="late-on">⚠️ 지난 일정 칸 다시 켜기</button>'}<span class="faint" style="margin-left:auto">⠿ 끌기 · ✏️ 이름 · 🗑 삭제 · ━ 길이</span></div>`:''}
+    ${rz('check', cards, 'ckbody', ed)}</details>`;
 }
 function todoSheet(t){
   openSheet(`<h3>${t?'할 일 편집':'할 일 추가'}</h3>
@@ -834,13 +852,15 @@ function todoSheet(t){
 function indicatorsCard(){
   const b=S.data.briefs.find(x=>x.sec_indicators && String(x.sec_indicators).trim());
   if (!b) return '';
-  return `<details class="card daily" ${S.dailyOpen===false?'':'open'}><summary>📈 증시 · 관심 지표 · ${md(b.date)} <span class="faint">(눌러서 접기)</span></summary>${rz('ind', renderIndicators(b.sec_indicators, true))}</details>`;
+  return `<details class="card daily ${ED('ind')?'editing':''}" ${S.dailyOpen===false?'':'open'}><summary>${cardGrip('ind')}📈 증시 · 관심 지표 · ${md(b.date)}<span class="sp"></span>${editBtn('ind')}</summary>${rz('ind', renderIndicators(b.sec_indicators, ED('ind')?'drag':'sort'), '', ED('ind'))}</details>`;
 }
-function viewToday(){
-  const d=S.data, items=unseenList('item');
-  if (!items.length) return checklistCard() + indicatorsCard() + seedCard('today') + trackCard() + `<div class="card empty">새 브리핑이 없어요 👏<br><span class="faint">확인한 답변은 📝 메모 탭에 내 질문과 함께, 🎓로 옮긴 건 공부 탭에 있어요.</span></div>`;
-  let html = checklistCard() + indicatorsCard() + seedCard('today') + trackCard() + `<div class="card bar"><b>📋 일일 브리핑 ${items.length}건</b><span class="faint sp">[✓ 확인]을 누르면 바로 내려가고 📝 메모 탭에 내 질문과 함께 저장돼요</span></div>`;
-  let last=null, buf='';
+const CARD_KEYS = ['check','ind','seed','track','brief'];
+function cardOrder(){ const c=(layout().cards||[]).filter(k=>CARD_KEYS.includes(k)); return c.concat(CARD_KEYS.filter(k=>!c.includes(k))); }
+function briefBlock(){
+  const d=S.data, items=unseenList('item'), ed=ED('brief');
+  const bar = n => `<div class="card bar ${ed?'editing':''}">${cardGrip('brief')}<b>📋 일일 브리핑 ${n}건</b><span class="faint">${n?'[✓ 확인] → 📝 메모 탭에 저장':'새 브리핑이 없어요 👏'}</span><span class="sp"></span>${editBtn('brief')}</div>`;
+  if (!items.length) return bar(0);
+  let html = bar(items.length), last=null, buf='';
   const flush = () => { if (buf) { html += `<div class="bgrid">${buf}</div>`; buf=''; } };
   items.slice().sort((a,b)=>String(b.date).localeCompare(String(a.date))||String(a.createdAt).localeCompare(String(b.createdAt))).forEach(it => {
     if (it.date!==last){ flush(); last=it.date; const n=items.filter(x=>x.date===it.date).length;
@@ -850,6 +870,11 @@ function viewToday(){
   });
   flush();
   return html;
+}
+// 브리핑 탭 카드 순서: 각 카드 ✏️ 편집 → ⠿ 로 끌기 (체크리스트 설정 cards 에 저장 → 폰·PC 같음)
+function viewToday(){
+  const parts = { check: checklistCard, ind: indicatorsCard, seed: () => seedCard('today'), track: trackCard, brief: briefBlock };
+  return `<div data-lkind="cards">${cardOrder().map(k => { const h=parts[k](); return h ? `<div class="tcard" data-litem="${k}">${h}</div>` : ''; }).join('')}</div>`;
 }
 function schedRow(s, showDate){
   const [t,c] = dday(s.date);
@@ -1297,7 +1322,9 @@ document.addEventListener('click', async e => {
   const t=e.target.closest('button, [data-open-b], input.chk'); if(!t) return;
   const ds=t.dataset;
   if (t.closest('nav') && ds.tab){ if (S.tab===ds.tab && ds.tab==='manage') S.dom=null; S.tab=ds.tab; S.briefDate=null; window.scrollTo(0,0); render(); return; }
-  if (t.id==='check-edit'){ e.preventDefault(); S.checkOpen=true; S.checkEdit=!S.checkEdit; const y=window.scrollY; render(); window.scrollTo(0,y); return; }
+  if (ds.ed){ e.preventDefault(); S.ed=S.ed||{}; S.ed[ds.ed]=!S.ed[ds.ed];
+    if (S.ed[ds.ed]) ({check:()=>S.checkOpen=true, ind:()=>S.dailyOpen=true, seed:()=>S.seedOpen=true, track:()=>S.trackOpen=true})[ds.ed]?.();
+    const y=window.scrollY; render(); window.scrollTo(0,y); return; }
   if (ds.badd){ S.addBucket=ds.badd; todoSheet(null); return; }
   if (ds.bren){ const L=layout(), bb=L.buckets.find(x=>x.id===ds.bren); const v=prompt('칸 이름', bb?bb.name:''); if(!v||!v.trim()||!bb) return; bb.name=v.trim(); saveLayout(L); render(); return; }
   if (ds.bdel){ const L=layout(), isLate=ds.bdel==='late'; if (!isLate && L.buckets.filter(x=>x.id!=='late').length<=1) return toast('칸이 하나는 있어야 해요'); const bb=L.buckets.find(x=>x.id===ds.bdel);
@@ -1305,7 +1332,7 @@ document.addEventListener('click', async e => {
     if (isLate) L.lateOff=true; L.buckets=L.buckets.filter(x=>x.id!==ds.bdel); delete L.items[ds.bdel]; saveLayout(L); render(); return; }
   if (t.id==='late-on'){ const L=layout(); L.lateOff=false; if (!L.buckets.some(b=>b.id==='late')) L.buckets.unshift({id:'late', name:LATE_NAME}); saveLayout(L); render(); return; }
   if (t.id==='bucket-add'){ const v=prompt('새 칸 이름 (예: 📚 공부, 💼 인턴)'); if(!v||!v.trim()) return; const L=layout(); L.buckets.push({id:'b'+Date.now().toString(36), name:v.trim()}); saveLayout(L); render(); return; }
-  if (t.id==='todo-new'){ S.addBucket=null; todoSheet(null); return; }
+  if (t.id==='todo-new'){ e.preventDefault(); S.addBucket=null; todoSheet(null); return; }
   if (ds.editT){ todoSheet((S.data.todos||[]).find(x=>x.id===ds.editT)); return; }
   if (ds.due!==undefined && t.closest('#sheet')){ $('#t-due').value=ds.due; t.parentNode.querySelectorAll('button').forEach(b=>b.classList.toggle('on', b===t)); return; }
   if (t.id==='t-del'){ if(!confirm('이 할 일을 삭제할까요?')) return; closeSheet(); const id=ds.id; quick(()=>{ S.data.todos=S.data.todos.filter(x=>x.id!==id); }, 'uiDelete','todo',id); toast('삭제했어요'); return; }
