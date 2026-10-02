@@ -860,7 +860,14 @@ async function loadQuotes(){
   const syms = wlItems().map(x=>x.symbol).concat((S.found||[]).map(x=>x.symbol));
   if(!syms.length) return;
   S.quotesLoaded = true;
-  try { const q = await call('uiQuotes', syms); S.quotes = Object.assign(S.quotes||{}, q); if(S.tab==='watch') render(); } catch(e){}
+  const tv = syms.filter(x=>/^TV:/.test(x)), rest = syms.filter(x=>!/^TV:/.test(x));
+  // TV: 지표(야간선물 등)는 브라우저에서 트레이딩뷰로 바로 조회 (앱 서버에선 막혀 있음)
+  if (tv.length) fetch('https://scanner.tradingview.com/global/scan', { method:'POST', headers:{'Content-Type':'text/plain'},
+      body: JSON.stringify({ symbols:{ tickers: tv.map(x=>x.slice(3)) }, columns:['close','change','Perf.W'] }) })
+    .then(r=>r.json()).then(j=>{ const q={}; tv.forEach(x=>q[x]=null); (j.data||[]).forEach(r=>{ q['TV:'+r.s]={price:r.d[0], d1:r.d[1], d5:r.d[2]}; });
+      S.quotes=Object.assign(S.quotes||{}, q); if(S.tab==='watch') render(); }).catch(()=>{});
+  if (!rest.length) return;
+  try { const q = await call('uiQuotes', rest); S.quotes = Object.assign(S.quotes||{}, q); if(S.tab==='watch') render(); } catch(e){}
 }
 function quoteCell(sym){
   const q=(S.quotes||{})[sym];
