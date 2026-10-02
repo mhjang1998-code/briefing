@@ -58,6 +58,10 @@ b.k{font-weight:700}
 .ind .chgs span{background:var(--chip);border-radius:7px;padding:2px 7px;color:var(--sub)}
 .ind .chgs b{font-weight:700} .ind .chgs .up b{color:var(--up)} .ind .chgs .down b{color:var(--down)}
 .ind .note{grid-column:1/-1;font-size:13px;color:var(--sub)}
+.ind.dr{grid-template-columns:18px 1fr auto} .ind.dr .lgrip{grid-row:1/span 9} .ind.dr .chgs,.ind.dr .note{grid-column:2/-1}
+.lgrip{cursor:grab;touch-action:none;user-select:none;color:var(--faint);font-size:16px;line-height:20px;padding:0 2px;flex:none}
+.lph{opacity:.35;outline:2px dashed var(--accent);outline-offset:-2px;border-radius:8px}
+.lghost{position:fixed;z-index:50;pointer-events:none;background:var(--card);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.25);padding:4px 10px;opacity:.95;margin:0}
 .up{color:var(--up)} .down{color:var(--down)}
 .hero{padding:4px 2px 10px} .hero .date{font-size:13px;color:var(--sub);display:flex;gap:6px;align-items:center} .hero .h{font-size:17px;font-weight:700}
 .row{display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-top:1px solid var(--line)}
@@ -427,7 +431,7 @@ function rz(k, inner, cls){ const h=(S.rz||{})[k]||0;
   return `<div class="rzb ${cls||''}" data-rz="${esc(k)}" style="${h?`max-height:${h}px`:''}">${inner}</div><div class="rzh" data-rzk="${esc(k)}" title="끌어서 길이 조절 · 두 번 누르면 원래대로"><i></i></div>`; }
 function saveRz(){ const ks=Object.keys(S.rz||{}); if (ks.length>300) ks.slice(0,ks.length-300).forEach(k=>delete S.rz[k]); try{ localStorage.setItem('rz_h', JSON.stringify(S.rz||{})); }catch(_){} }
 /* ── ⠿ 체크리스트 끌어서 옮기기(항목·칸) · 길이 조절 (마우스·터치 공통) ── */
-let CK=null, CKR=null, CB=null;
+let CK=null, CKR=null, CB=null, LD=null;
 function edgeScroll(e, el){
   const box=el && el.closest('.rzb');
   if (box){ const b=box.getBoundingClientRect(); if (e.clientY < b.top+30) box.scrollTop-=14; else if (e.clientY > b.bottom-30) box.scrollTop+=14; }
@@ -438,6 +442,10 @@ document.addEventListener('pointerdown', e => {
   if (g){ e.preventDefault(); const row=g.closest('.ck'), r=row.getBoundingClientRect();
     const ghost=row.cloneNode(true); ghost.classList.add('ckghost'); Object.assign(ghost.style,{width:r.width+'px',left:r.left+'px',top:r.top+'px'}); document.body.appendChild(ghost);
     row.classList.add('ckph'); CK={row, ghost, dy:e.clientY-r.top}; return; }
+  const lg = e.target.closest && e.target.closest('.lgrip');
+  if (lg){ const el=lg.closest('[data-litem]'), box=el && el.parentNode; if (!box || !box.dataset.lkind) return; e.preventDefault(); const r=el.getBoundingClientRect();
+    const ghost=el.cloneNode(true); ghost.classList.add('lghost'); Object.assign(ghost.style,{width:r.width+'px',left:r.left+'px',top:r.top+'px'}); document.body.appendChild(ghost);
+    el.classList.add('lph'); LD={el, box, ghost, dy:e.clientY-r.top}; return; }
   const bg = e.target.closest && e.target.closest('.bgrip');
   if (bg){ e.preventDefault(); const el=bg.closest('.bucket'), r=el.getBoundingClientRect();
     const ghost=el.cloneNode(true); ghost.classList.add('bghost'); Object.assign(ghost.style,{width:r.width+'px',left:r.left+'px',top:r.top+'px',maxHeight:'160px',overflow:'hidden'}); document.body.appendChild(ghost);
@@ -451,6 +459,11 @@ document.addEventListener('pointermove', e => {
     if (list){ const rows=[...list.querySelectorAll('.ck:not(.ckph)')], before=rows.find(r=>{ const b=r.getBoundingClientRect(); return e.clientY < b.top + b.height/2; });
       const emp=list.querySelector('.empty-b'); if (emp) emp.remove(); if (CK.row.nextSibling!==before || CK.row.parentNode!==list) list.insertBefore(CK.row, before||null); }
     edgeScroll(e, el); return; }
+  if (LD){ e.preventDefault(); LD.ghost.style.top=(e.clientY-LD.dy)+'px';
+    const sib=[...LD.box.children].filter(x=>x.dataset.litem!=null && x!==LD.el);
+    const before=sib.find(b=>{ const r=b.getBoundingClientRect(); return e.clientY < r.top + r.height/2; });
+    if (LD.el.nextSibling!==before) LD.box.insertBefore(LD.el, before||null);
+    edgeScroll(e, LD.el); return; }
   if (CB){ e.preventDefault(); CB.ghost.style.top=(e.clientY-CB.dy)+'px';
     const box=CB.el.parentNode, bks=[...box.children].filter(x=>x.classList.contains('bucket') && x!==CB.el);
     const before=bks.find(b=>{ const r=b.getBoundingClientRect(); return e.clientY < r.top + r.height/2; });
@@ -463,6 +476,8 @@ document.addEventListener('pointerup', () => {
     const L=layout(); L.items={};
     document.querySelectorAll('.checklist .bucket[data-bucket]').forEach(b => { L.items[b.dataset.bucket]=[...b.querySelectorAll('.blist .ck')].map(r=>r.dataset.ck); });
     saveLayout(L); const y=window.scrollY; render(); window.scrollTo(0,y); return; }
+  if (LD){ const {el, box, ghost}=LD; LD=null; ghost.remove(); el.classList.remove('lph');
+    saveWlOrder(box.dataset.lkind, [...box.children].filter(x=>x.dataset.litem!=null).map(x=>x.dataset.litem), el.dataset.litem); return; }
   if (CB){ const {el, ghost}=CB; CB=null; ghost.remove(); el.classList.remove('bph');
     const L=layout(), ord=[...document.querySelectorAll('.checklist .bucket[data-bid]')].map(b=>b.dataset.bid);
     document.querySelectorAll('.checklist .bucket[data-bucket]').forEach(b => { L.items[b.dataset.bucket]=[...b.querySelectorAll('.blist .ck')].map(r=>r.dataset.ck); }); // 칸 순서만 바뀌고 항목은 제자리
@@ -543,22 +558,27 @@ function renderLines(text){
   });
   return `<ul class="lines">${out.join('')}</ul>`;
 }
-function renderIndicators(text){
-  const lines = String(text||'').split('\n').filter(l=>l.trim());
-  let html = '';
+function renderIndicators(text, drag){
+  const lines = String(text||'').split('\n').filter(l=>l.trim()), blocks=[];
   lines.forEach(l => {
     const t = l.trim();
-    if (t.startsWith('↳')) { html += `<div class="ind"><div class="note">↳ ${esc(t.replace(/^↳\s*/,''))}</div></div>`; return; }
+    if (t.startsWith('↳')) { const n=`<div class="note">↳ ${esc(t.replace(/^↳\s*/,''))}</div>`; if (blocks.length) blocks[blocks.length-1].notes+=n; else blocks.push({name:'',head:'',notes:n}); return; }
     const m = t.match(/^•\s*(.+?)\s+([\d,.\-]+)\s+([▲▼―][\d.]+%)(?:\s+\((?:5일|1주)\s*([+\-]?[\d.]+%)\))?$/);
-    if (!m) { html += `<div class="ind"><div class="name">${esc(t.replace(/^•\s*/,''))}</div></div>`; return; }
+    if (!m) { const nm=t.replace(/^•\s*/,''); blocks.push({name:nm, head:`<div class="name">${esc(nm)}</div>`, notes:''}); return; }
     const cls = m[3][0]==='▲'?'up':m[3][0]==='▼'?'down':'';
     const w = m[4] ? parseFloat(m[4]) : null, c5 = w==null ? '' : w<0 ? 'down' : w>0 ? 'up' : '';
     const wTxt = w==null ? '-' : (w>0?'▲':w<0?'▼':'―') + Math.abs(w).toFixed(1) + '%';
-    html += `<div class="ind"><div class="name">${esc(m[1])}</div><div class="px">${esc(m[2])}</div>
-      <div class="chgs"><span class="${cls}">전일 <b>${esc(m[3])}</b></span><span class="${c5}">1주 <b>${esc(wTxt)}</b></span></div></div>`;
+    blocks.push({name:m[1], notes:'', head:`<div class="name">${esc(m[1])}</div><div class="px">${esc(m[2])}</div>
+      <div class="chgs"><span class="${cls}">전일 <b>${esc(m[3])}</b></span><span class="${c5}">1주 <b>${esc(wTxt)}</b></span></div>`});
   });
-  // ↳ 코멘트는 바로 위 지표 아래에 붙도록 note 블록만 이어 붙인다
-  return html.replace(/<\/div><div class="ind"><div class="note">/g, '<div class="note">');
+  if (!drag) return blocks.map(b=>`<div class="ind">${b.head}${b.notes}</div>`).join('');
+  // 오늘 카드: 📈 지표 탭 순서대로 보이고 ⠿ 로 끌어 바꾸면 지표 탭 순서도 같이 바뀜 (모르는 줄은 제자리)
+  const ord={}; ((S.data.watchlist||{}).items||[]).forEach((w,i)=>{ ord[w.label]=i; });
+  const slots=[], mine=[]; blocks.forEach((b,i)=>{ if (ord[b.name]!=null){ slots.push(i); mine.push(b); } });
+  mine.sort((a,b)=>ord[a.name]-ord[b.name]); slots.forEach((p,k)=>{ blocks[p]=mine[k]; });
+  return `<div data-lkind="ind">${blocks.map(b=> ord[b.name]!=null
+    ? `<div class="ind dr" data-litem="${esc(b.name)}"><span class="lgrip" title="끌어서 순서 바꾸기">⠿</span>${b.head}${b.notes}</div>`
+    : `<div class="ind">${b.head}${b.notes}</div>`).join('')}</div>`;
 }
 function commentThread(type, id, comments, open){
   if (!open) return '';
@@ -814,7 +834,7 @@ function todoSheet(t){
 function indicatorsCard(){
   const b=S.data.briefs.find(x=>x.sec_indicators && String(x.sec_indicators).trim());
   if (!b) return '';
-  return `<details class="card daily" ${S.dailyOpen===false?'':'open'}><summary>📈 증시 · 관심 지표 · ${md(b.date)} <span class="faint">(눌러서 접기)</span></summary>${rz('ind', renderIndicators(b.sec_indicators))}</details>`;
+  return `<details class="card daily" ${S.dailyOpen===false?'':'open'}><summary>📈 증시 · 관심 지표 · ${md(b.date)} <span class="faint">(눌러서 접기)</span></summary>${rz('ind', renderIndicators(b.sec_indicators, true))}</details>`;
 }
 function viewToday(){
   const d=S.data, items=unseenList('item');
@@ -1009,19 +1029,17 @@ function quoteCell(sym){
 function viewWatch(){
   const items = wlItems(), have = new Set(items.map(x=>x.symbol));
   const on = items.filter(x=>x.enabled!==false).length;
-  const rows = items.map((it,i)=>`<div class="row wl-row" style="align-items:center">
+  const rows = items.map((it,i)=>`<div data-litem="${i}"><div class="row wl-row" style="align-items:center">
+      <span class="lgrip" title="끌어서 순서 바꾸기">⠿</span>
       <label class="sw"><input type="checkbox" data-wl-on="${i}" ${it.enabled!==false?'checked':''}><span></span></label>
       <div class="body"><div style="font-weight:600;${it.enabled===false?'color:var(--faint)':''}">${esc(it.label)}</div>
         <div class="meta">${esc(it.symbol)}${it.prompt?' · 지시: '+esc(it.prompt):''}</div></div>
       <div style="text-align:right;min-width:92px">${quoteCell(it.symbol)}</div>
-      <div style="display:flex;flex-direction:column;gap:2px">
-        <button class="tbtn" data-wl-up="${i}" ${i===0?'disabled':''} style="padding:2px 8px">▲</button>
-        <button class="tbtn" data-wl-down="${i}" ${i===items.length-1?'disabled':''} style="padding:2px 8px">▼</button></div>
       <button class="tbtn" data-wl-more="${i}" style="padding:4px 8px">⋯</button></div>
       ${S.wlOpen===i?`<div class="card" style="background:var(--bg);margin:0 0 8px">
         <div class="faint" style="margin-bottom:4px">이 지표만의 지시 (예: 1350 넘으면 알려줘)</div>
         <input data-wl-prompt="${i}" value="${esc(it.prompt||'')}" placeholder="비워 두면 숫자만 보여줘요">
-        <div class="form-row"><button class="btn ghost" data-wl-del="${i}" style="color:var(--up)">목록에서 삭제</button><button class="btn" data-wl-close>닫기</button></div></div>`:''}`).join('');
+        <div class="form-row"><button class="btn ghost" data-wl-del="${i}" style="color:var(--up)">목록에서 삭제</button><button class="btn" data-wl-close>닫기</button></div></div>`:''}</div>`).join('');
   const cat = S.cat || Object.keys(PRESETS)[0];
   const presetChips = PRESETS[cat].map(([l,sym])=>`<button class="tbtn ${have.has(sym)?'on':''}" data-add="${esc(sym)}" data-label="${esc(l)}">${have.has(sym)?'✓ ':'+ '}${esc(l)}</button>`).join('');
   const found = (S.found||[]).map(f=>`<div class="row" style="align-items:center"><div class="body"><div style="font-weight:600">${esc(f.label)}</div><div class="meta">${esc(f.market)} · ${esc(f.symbol)}</div></div>
@@ -1029,8 +1047,8 @@ function viewWatch(){
       <button class="tbtn ${have.has(f.symbol)?'on':''}" data-add="${esc(f.symbol)}" data-label="${esc(f.label)}">${have.has(f.symbol)?'✓ 추가됨':'+ 추가'}</button></div>`).join('');
   return `<section class="card"><h2>내 지표 <span class="count">브리핑 포함 ${on} / ${items.length}</span>
       <button class="tbtn" id="wl-refresh" style="margin-left:auto">↻ 시세</button></h2>
-    <div class="faint" style="margin-bottom:4px">스위치를 끄면 목록엔 남고 브리핑에서만 빠져요. 순서가 브리핑 표시 순서예요.</div>
-    ${rows || '<div class="empty">지표가 없어요. 아래에서 추가하세요</div>'}</section>
+    <div class="faint" style="margin-bottom:4px">스위치를 끄면 목록엔 남고 브리핑에서만 빠져요. ⠿ 를 끌어 순서를 바꾸면 바로 저장되고 브리핑 탭에도 같은 순서로 보여요.</div>
+    <div data-lkind="wl">${rows}</div>${rows ? '' : '<div class="empty">지표가 없어요. 아래에서 추가하세요</div>'}</section>
     <section class="card"><h2>종목 검색해서 추가</h2>
       <div class="form-row" style="margin:0"><input id="wl-q" placeholder="예: 한미반도체, 엔비디아, 에코프로" value="${esc(S.q||'')}"><button class="btn" style="flex:none" id="wl-search">검색</button></div>
       ${S.searching?'<div class="faint" style="margin-top:8px">검색 중…</div>':found}</section>
@@ -1043,6 +1061,28 @@ function viewWatch(){
       <button class="btn" id="wl-save" style="width:100%;box-shadow:0 6px 18px rgba(47,111,237,.3)" ${S.wlDirty?'':'disabled'}>${S.wlDirty?'변경 내용 저장':'저장됨'}</button></div>`;
 }
 function wlChanged(){ S.wlDirty=true; render(); }
+// ⠿ 지표 순서: 지표 탭·브리핑 탭 어디서 끌어도 같은 목록(watchlist) 순서를 바로 저장
+async function saveWlOrder(kind, keys, moved){
+  let items;
+  if (kind==='wl'){
+    const a=wlItems(); items=keys.map(k=>a[+k]).filter(Boolean); if (items.length!==a.length) return render();
+    S.wl=items; S.wlOpen=null;
+    if (S.wlDirty){ render(); return toast('「변경 내용 저장」을 누르면 순서도 같이 저장돼요'); }
+  } else {
+    // 끈 지표만 옮긴다: 브리핑 카드에서 바로 다음(없으면 바로 앞) 지표 옆으로. 카드에 없는 지표(꺼진 것 등)는 제자리
+    items=S.data.watchlist.items.slice(); const k=keys.indexOf(moved), from=items.findIndex(w=>w.label===moved);
+    if (k<0 || from<0) return render();
+    const it=items.splice(from,1)[0], nx=keys[k+1], pv=keys[k-1];
+    const at = nx!=null ? items.findIndex(w=>w.label===nx) : items.findIndex(w=>w.label===pv)+1;
+    items.splice(at<0 ? items.length : at, 0, it);
+    if (S.wlDirty){ S.data.watchlist.items=items; const y=window.scrollY; render(); window.scrollTo(0,y); return toast('지표 탭에 저장 안 한 변경이 있어요 · 거기서 「변경 내용 저장」'); }
+    S.wl=null;
+  }
+  S.data.watchlist.items = items.map(x=>Object.assign({},x));
+  const y=window.scrollY; render(); window.scrollTo(0,y);
+  try { await callOnce('uiSaveWatchlist', [items.map(x=>Object.assign({},x)), S.data.watchlist.prompt||'']); toast('순서 저장됨'); }
+  catch(e){ toast('순서 저장 실패 · 다시 불러올게요'); try { S.data = await call('uiLoad'); S.wl=null; render(); } catch(_){} }
+}
 
 /* ── 공부: 내가 🎓로 옮긴 메모·답변만 카테고리(금융·부동산…)별 시간순으로 ── */
 const memoIdsOf = it => String(it.memoIds||'').split(',').map(x=>x.trim()).filter(Boolean);
