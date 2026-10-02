@@ -1,6 +1,6 @@
 /**
  * 아침 브리핑 앱 — Google Sheets + Apps Script 웹앱
- * - 시트: 대시보드 / 브리핑 / 메모 / 댓글 / 일정 / 할일 / 지표 / 설정
+ * - 시트: 대시보드 / 브리핑 / 메모 / 댓글 / 일정 / 할일 / 지표 / 설정 / 항목 / 씨앗
  * - doGet  : ?k=<키>            → 아이폰·PC용 앱 화면
  *            ?api=pull&key=<키> → 매일 루틴이 읽는 JSON
  * - doPost : {key, action:"push"|"import", ...} → 매일 루틴이 쓰는 JSON
@@ -40,13 +40,17 @@ const SCHEMA = {
   watchlist: { sheet: '지표', key: 'symbol', bools: [], cols: [
     ['order', '순서'], ['label', '이름'], ['symbol', '심볼'], ['enabled', '포함'], ['prompt', '프롬프트'], ['price', '현재가'],
     ['d1', '전일비'], ['d5', '5일'], ['comment', '코멘트'], ['updatedAt', '갱신시각']] },
+  seeds: { sheet: '씨앗', key: 'id', bools: [], cols: [
+    ['id', 'id'], ['date', '날짜'], ['name', '영역'], ['count', '개수'], ['updatedAt', '수정시각']] },
   settings: { sheet: '설정', key: 'key', bools: [], cols: [['key', '키'], ['value', '값']] },
 };
 
 const CATEGORIES = ['일정', '할 일', '분석', '결정', '생각', '기타'];
 const DEFAULT_DOMAINS = ['금융', '부동산', '인사이트', '전공', '사업', '기타'];
 const TABS = ['today', 'memo', 'plan', 'history', 'watch', 'manage'];
-const SCHEMA_VERSION = 'v5';
+const SCHEMA_VERSION = 'v6';
+const DEFAULT_SEEDS = ['전공', '영어', '금융', '부동산', '연애', '통제'];
+const SEED_MAX = 3;
 // 화면에서 직접 고칠 수 있는 칸 (앞으로 화면 기능을 늘려도 서버를 다시 붙여넣지 않도록 넓게 둔다)
 const EDITABLE = {
   memos: ['text', 'day', 'category', 'domain', 'folder', 'mpin', 'hidden', 'sort', 'pinned', 'seenAt', 'status'],
@@ -74,7 +78,7 @@ function ensureSetup_() {
   if (ss_().getSheetByName('설정') && PropertiesService.getScriptProperties().getProperty('API_KEY')) {
     const cache = CacheService.getScriptCache();
     if (cache.get('schema') === SCHEMA_VERSION) return;
-    ensureSheet_('items'); ensureColumns_('watchlist'); ensureColumns_('memos'); ensureColumns_('briefs'); ensureColumns_('items');
+    ensureSheet_('items'); ensureSheet_('seeds'); ensureColumns_('watchlist'); ensureColumns_('memos'); ensureColumns_('briefs'); ensureColumns_('items');
     cache.put('schema', SCHEMA_VERSION, 21600);
     return;
   }
@@ -231,6 +235,8 @@ function tabs_() {
   return { order, hidden: (t.hidden || []).filter(x => TABS.indexOf(x) >= 0) };
 }
 function folders_() { return jsonSetting_('관리폴더', {}); }
+function seedList_() { const l = jsonSetting_('씨앗목록', null); return Array.isArray(l) && l.length ? l : DEFAULT_SEEDS.slice(); }
+function seeds_() { return readAll_('seeds').map(x => ({ date: String(x.date), name: String(x.name), count: Math.max(0, Math.min(SEED_MAX, +x.count || 0)) })).filter(x => x.count); }
 function getSetting_(k) { const r = findBy_('settings', 'key', k); return r ? String(r.value) : ''; }
 function setSetting_(k, v) { upsert_('settings', { key: k, value: v }); }
 
@@ -415,6 +421,10 @@ function apiPull_() {
     domains: domains_(),
     itemsWithNewComments: readAll_('items').map(i => attach_('item', i, idx)).filter(i => i.hasNewComment),
     memosNoDomain: memos.filter(m => !m.domain).slice(0, 50).map(m => ({ id: m.id, day: m.day, text: m.text })),
+    pinnedItems: readAll_('items').map(i => attach_('item', i, idx)).filter(i => i.pinned),
+    seedList: seedList_(),
+    seedsRecent: seeds_().filter(x => x.date >= Utilities.formatDate(new Date(Date.now() - 14 * 864e5), TZ, 'yyyy-MM-dd'))
+      .sort((a, b) => a.date.localeCompare(b.date)),
   };
 }
 
@@ -559,13 +569,42 @@ function importData_(d) {
 
 /* ───────────── 앱 화면용 함수 (google.script.run 또는 외부 앱의 POST action:"ui") ───────────── */
 
-const UI_FUNCS = { uiLoad, uiAddMemo, uiEditMemo, uiDeleteMemo, uiTogglePin, uiAddComment, uiDeleteComment,
+const UI_FUNCS = { uiSetSeed, uiSaveSeedList, uiRenameSeed, uiLoad, uiAddMemo, uiEditMemo, uiDeleteMemo, uiTogglePin, uiAddComment, uiDeleteComment,
   uiSetSeen, uiSetDomain, uiSaveDomains, uiSetEntry, uiSetEntries, uiDeleteItem, uiSaveTabs, uiSaveFolders, uiRenameFolder, uiDeleteFolder, uiSaveSchedule, uiSetDone, uiDelete, uiAddTodo, uiSaveWatchlist, uiSearch, uiQuotes };
 
 function uiDispatch_(body) {
   const fn = UI_FUNCS[body.fn];
   if (!fn) throw new Error('알 수 없는 fn: ' + body.fn);
   return { ok: true, data: fn.apply(null, [body.key].concat(body.args || [])) };
+}
+
+/* 🌱 씨앗: 날짜·영역마다 0~SEED_MAX 개. 0이면 행을 지운다. 빠른 응답을 위해 씨앗만 돌려준다 */
+function uiSetSeed(key, date, name, count) {
+  checkKey_(key);
+  date = String(date || ''); name = String(name || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !name) throw new Error('날짜·영역을 확인해 주세요.');
+  const n = Math.max(0, Math.min(SEED_MAX, Math.round(+count || 0))), id = date + '|' + name;
+  withLock_(() => { if (n) upsert_('seeds', { id, date, name, count: n, updatedAt: nowIso_() }); else deleteBy_('seeds', 'id', id); });
+  return { seeds: seeds_(), seedList: seedList_() };
+}
+function uiSaveSeedList(key, list) {
+  checkKey_(key);
+  const clean = (list || []).map(x => String(x).trim()).filter(Boolean).filter((x, i, a) => a.indexOf(x) === i).slice(0, 20);
+  if (!clean.length) throw new Error('영역이 하나는 있어야 해요.');
+  withLock_(() => setSetting_('씨앗목록', JSON.stringify(clean)));
+  return { seeds: seeds_(), seedList: seedList_() };
+}
+function uiRenameSeed(key, from, to) {
+  checkKey_(key);
+  from = String(from || '').trim(); to = String(to || '').trim();
+  if (!from || !to || from === to) return { seeds: seeds_(), seedList: seedList_() };
+  withLock_(() => {
+    const l = seedList_(); if (l.indexOf(to) >= 0) throw new Error('이미 있는 이름이에요.');
+    setSetting_('씨앗목록', JSON.stringify(l.map(x => x === from ? to : x)));
+    readAll_('seeds').filter(r => String(r.name) === from)
+      .forEach(r => patchRow_('seeds', r._row, { id: String(r.date) + '|' + to, name: to }));
+  });
+  return { seeds: seeds_(), seedList: seedList_() };
 }
 
 function uiLoad(key) {
@@ -584,7 +623,7 @@ function uiLoad(key) {
     .sort((a, b) => String(b.date).localeCompare(String(a.date)) || String(a.createdAt).localeCompare(String(b.createdAt)))
     .slice(0, 800);
   return { today: today_(), sections: SECTIONS, categories: CATEGORIES, domains: domains_(), tabs: tabs_(), folders: folders_(),
-    briefs, memos, items, schedules, todos,
+    briefs, memos, items, schedules, todos, seeds: seeds_(), seedList: seedList_(), seedMax: SEED_MAX,
     watchlist: { items: watchlist_(), prompt: getSetting_('지표공통프롬프트') } };
 }
 
