@@ -466,6 +466,7 @@ function apiPull_() {
     itemsWithNewComments: readAll_('items').map(i => attach_('item', i, idx)).filter(i => i.hasNewComment),
     memosNoDomain: memos.filter(m => !m.domain).slice(0, 50).map(m => ({ id: m.id, day: m.day, text: m.text })),
     pinnedItems: readAll_('items').map(i => attach_('item', i, idx)).filter(i => i.pinned),
+    checklist: jsonSetting_(UI_SETTINGS.checklist, null),
     seedList: seedList_(),
     seedsRecent: seeds_().filter(x => x.date >= Utilities.formatDate(new Date(Date.now() - 14 * 864e5), TZ, 'yyyy-MM-dd'))
       .sort((a, b) => a.date.localeCompare(b.date)),
@@ -622,7 +623,7 @@ function importData_(d) {
 
 /* ───────────── 앱 화면용 함수 (google.script.run 또는 외부 앱의 POST action:"ui") ───────────── */
 
-const UI_FUNCS = { uiRunBrief, uiSetRoutineToken, uiSetPin, uiSetSeed, uiSaveSeedList, uiRenameSeed, uiLoad, uiAddMemo, uiEditMemo, uiDeleteMemo, uiTogglePin, uiAddComment, uiDeleteComment,
+const UI_FUNCS = { uiSaveUiSetting, uiRunBrief, uiSetRoutineToken, uiSetPin, uiSetSeed, uiSaveSeedList, uiRenameSeed, uiLoad, uiAddMemo, uiEditMemo, uiDeleteMemo, uiTogglePin, uiAddComment, uiDeleteComment,
   uiSetSeen, uiSetDomain, uiSaveDomains, uiSetEntry, uiSetEntries, uiDeleteItem, uiSaveTabs, uiSaveFolders, uiRenameFolder, uiDeleteFolder, uiSaveSchedule, uiSetDone, uiDelete, uiAddTodo, uiSaveWatchlist, uiSearch, uiQuotes };
 
 function uiDispatch_(body) {
@@ -722,6 +723,18 @@ function noRecurEdit_(id, patch) {
   if (r && r.recurring && ['title', 'date', 'time'].some(k => k in patch)) throw new Error('반복 일정은 구글 캘린더에서 고쳐 주세요.');
 }
 
+/* 화면 설정(JSON) 저장: 체크리스트 칸 구성 등. 이름은 정해진 것만, 크기 제한 */
+const UI_SETTINGS = { checklist: '체크리스트' };
+function uiSettings_() { const o = {}; Object.keys(UI_SETTINGS).forEach(k => { o[k] = jsonSetting_(UI_SETTINGS[k], null); }); return o; }
+function uiSaveUiSetting(key, name, value) {
+  checkKey_(key);
+  if (!UI_SETTINGS[name]) throw new Error('알 수 없는 설정: ' + name);
+  const v = JSON.stringify(value == null ? null : value);
+  if (v.length > 40000) throw new Error('설정이 너무 커요.');
+  withLock_(() => setSetting_(UI_SETTINGS[name], v));
+  return { ok: true, uiset: uiSettings_() };
+}
+
 /* ⚡ 지금 브리핑: 앱 버튼 → 아침 브리핑 루틴을 바로 실행(수시 모드). 루틴 API 토큰은 스크립트 속성에만 저장 */
 const ROUTINE_ID = 'trig_019kHHwFVAua9dpSuPEXLgMW';
 function setRoutineToken_(t) {
@@ -803,7 +816,7 @@ function uiLoad(key) {
     .sort((a, b) => String(b.date).localeCompare(String(a.date)) || String(a.createdAt).localeCompare(String(b.createdAt)))
     .slice(0, 800);
   return { today: today_(), sections: SECTIONS, categories: CATEGORIES, domains: domains_(), tabs: tabs_(), folders: folders_(),
-    briefs, memos, items, schedules, todos, calError, seeds: seeds_(), seedList: seedList_(), seedMax: SEED_MAX,
+    briefs, memos, items, schedules, todos, calError, uiset: uiSettings_(), seeds: seeds_(), seedList: seedList_(), seedMax: SEED_MAX,
     watchlist: { items: watchlist_(), prompt: getSetting_('지표공통프롬프트') } };
 }
 

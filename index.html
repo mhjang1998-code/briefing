@@ -18,6 +18,7 @@
   --accent:#2f6fed; --accent-soft:#e8effd; --up:#d9363e; --down:#2f6fed; --warn:#c2410c; --warn-soft:#fdeee4;
   --ok:#15803d; --chip:#eef0f3; --shadow:0 1px 2px rgba(16,24,40,.06);
   --k-check:#d97706; --k-ind:#2563eb; --k-seed:#16a34a; --k-track:#7c3aed; --k-brief:#0e7490;
+  --bk0:#dc2626; --bk1:#d97706; --bk2:#16a34a; --bk3:#2563eb; --bk4:#7c3aed; --bkLate:#b91c1c;
   --k-ana:#2563eb; --k-think:#7c3aed; --k-dec:#16a34a; --k-etc:#d97706; --k-q:#db2777;
   --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100; --s5:#e87ba4; --s6:#008300; --s7:#4a3aa7; --s8:#e34948; --seed:#1f9d55;
 }
@@ -26,6 +27,7 @@
   --accent:#6b9bff; --accent-soft:#1d2a44; --up:#ff6b70; --down:#6b9bff; --warn:#fb923c; --warn-soft:#3a2416;
   --ok:#4ade80; --chip:#262a30; --shadow:none;
   --k-check:#f59e0b; --k-ind:#60a5fa; --k-seed:#4ade80; --k-track:#a78bfa; --k-brief:#22d3ee;
+  --bk0:#f87171; --bk1:#fbbf24; --bk2:#4ade80; --bk3:#60a5fa; --bk4:#a78bfa; --bkLate:#f87171;
   --k-ana:#60a5fa; --k-think:#a78bfa; --k-dec:#4ade80; --k-etc:#f59e0b; --k-q:#f472b6;
   --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#d55181; --s6:#008300; --s7:#9085e9; --s8:#e66767; --seed:#4ade80;
 }}
@@ -198,7 +200,29 @@ nav .nb{position:absolute;top:0;left:50%;margin-left:6px;background:var(--up);co
 .checklist .grp2{font-size:12px;font-weight:700;color:var(--faint);margin:10px 0 2px}
 .checklist .grp2.late{color:var(--up)}
 .checklist .row{padding:7px 0}
-.checklist .mv{display:flex;gap:2px} .checklist .mv .tbtn{padding:4px 7px}
+.ckbody{overflow:auto;overscroll-behavior:contain}
+.bucket{border:1px solid color-mix(in srgb,var(--bk,var(--faint)) 35%,var(--line));border-left:4px solid var(--bk,var(--faint));
+  background:color-mix(in srgb,var(--bk,var(--faint)) 5%,var(--card));border-radius:12px;padding:8px 10px;margin:0 0 8px}
+.bucket.late{--bk:var(--bkLate)}
+.bucket .bh{display:flex;align-items:center;gap:6px;font-weight:800;font-size:14px;color:color-mix(in srgb,var(--bk) 70%,var(--ink));margin-bottom:2px}
+.bucket .bh .count{background:var(--chip);border-radius:99px;padding:0 7px;font-size:11px;color:var(--sub);font-weight:600}
+.bucket .bh .sp{flex:1} .bucket .bh{white-space:nowrap} .bucket .bh .tbtn{padding:2px 8px}
+.blist{min-height:34px}
+.empty-b{font-size:12px;color:var(--faint);border:1px dashed var(--line);border-radius:8px;padding:8px;text-align:center}
+.ck{display:flex;align-items:flex-start;gap:8px;padding:7px 0;border-top:1px solid color-mix(in srgb,var(--line) 70%,transparent);background:transparent}
+.ck:first-child{border-top:0}
+.ck .grip{cursor:grab;touch-action:none;user-select:none;color:var(--faint);font-size:18px;line-height:22px;padding:0 2px;flex:none;width:16px}
+.ck .grip.off{cursor:default}
+.ck .body{flex:1;min-width:0;font-size:14px} .ck .meta{font-size:12px;color:var(--faint)}
+.ck.ckph{opacity:.35;outline:2px dashed var(--bk,var(--accent));outline-offset:-2px;border-radius:8px}
+.ckghost{position:fixed;z-index:50;pointer-events:none;background:var(--card);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.25);padding:6px 10px;opacity:.95}
+.dtag{display:inline-block;font-size:11px;font-weight:800;border-radius:6px;padding:1px 6px;margin-right:4px;vertical-align:1px}
+.dtag.late{background:color-mix(in srgb,var(--bkLate) 16%,var(--card));color:var(--bkLate)}
+.dtag.r{background:#fde2e2;color:#c81e1e} .dtag.o{background:#ffedd5;color:#c2410c} .dtag.y{background:#fef3c7;color:#a16207} .dtag.g{background:var(--chip);color:var(--sub)}
+@media (prefers-color-scheme: dark){ .dtag.r{background:#4a1d1d;color:#ff8a8a} .dtag.o{background:#43260f;color:#fdba74} .dtag.y{background:#3f3510;color:#fde047} }
+.ckresize{height:16px;margin:2px -16px -14px;display:flex;align-items:center;justify-content:center;cursor:ns-resize;touch-action:none}
+.ckresize i{width:44px;height:4px;border-radius:4px;background:var(--line)}
+.ckresize:hover i{background:var(--faint)}
 .seedcard summary{cursor:pointer;font-weight:700;color:var(--sub);font-size:13px;list-style:none}
 .seedcard summary::-webkit-details-marker{display:none}
 .seedcard[open] summary{margin-bottom:8px}
@@ -388,6 +412,36 @@ async function quick(mutate, fn, ...args){
 }
 const nowIso = () => new Date().toISOString();
 const findEntry = (type, id) => type==='item' ? (S.data.items||[]).find(i=>i.id===id) : S.data.memos.find(m=>m.id===id);
+/* ── ⠿ 체크리스트 끌어서 옮기기 · 높이 조절 (마우스·터치 공통) ── */
+let CK=null, CKR=null;
+document.addEventListener('pointerdown', e => {
+  const g = e.target.closest && e.target.closest('.ck .grip:not(.off)');
+  if (g){ e.preventDefault(); const row=g.closest('.ck'), r=row.getBoundingClientRect();
+    const ghost=row.cloneNode(true); ghost.classList.add('ckghost'); Object.assign(ghost.style,{width:r.width+'px',left:r.left+'px',top:r.top+'px'}); document.body.appendChild(ghost);
+    row.classList.add('ckph'); CK={row, ghost, dy:e.clientY-r.top}; return; }
+  const rz = e.target.closest && e.target.closest('.ckresize');
+  if (rz){ e.preventDefault(); const body=rz.parentNode.querySelector('.ckbody'); CKR={body, y:e.clientY, h:body.getBoundingClientRect().height}; }
+});
+document.addEventListener('pointermove', e => {
+  if (CK){ e.preventDefault(); CK.ghost.style.top=(e.clientY-CK.dy)+'px';
+    const el=document.elementFromPoint(e.clientX, e.clientY), bk=el && el.closest('.bucket[data-bucket]'), list=bk && bk.querySelector('.blist');
+    if (list){ const rows=[...list.querySelectorAll('.ck:not(.ckph)')], before=rows.find(r=>{ const b=r.getBoundingClientRect(); return e.clientY < b.top + b.height/2; });
+      const emp=list.querySelector('.empty-b'); if (emp) emp.remove(); if (CK.row.nextSibling!==before || CK.row.parentNode!==list) list.insertBefore(CK.row, before||null); }
+    const body=CK.row.closest('.ckbody') || document.querySelector('.ckbody');
+    if (body){ const b=body.getBoundingClientRect(); if (e.clientY < b.top+36) body.scrollTop-=14; else if (e.clientY > b.bottom-36) body.scrollTop+=14; }
+    if (e.clientY < 60) window.scrollBy(0,-14); else if (e.clientY > innerHeight-60) window.scrollBy(0,14);
+    return; }
+  if (CKR){ e.preventDefault(); const h=Math.max(120, CKR.h + e.clientY - CKR.y); CKR.body.style.maxHeight=h+'px'; }
+}, {passive:false});
+document.addEventListener('pointerup', () => {
+  if (CK){ const {row, ghost}=CK; CK=null; ghost.remove(); row.classList.remove('ckph');
+    const L=layout(); L.items={};
+    document.querySelectorAll('.checklist .bucket[data-bucket]').forEach(b => { L.items[b.dataset.bucket]=[...b.querySelectorAll('.blist .ck')].map(r=>r.dataset.ck); });
+    saveLayout(L); const y=window.scrollY; render(); window.scrollTo(0,y); return; }
+  if (CKR){ S.checkH=Math.round(CKR.body.getBoundingClientRect().height); CKR=null; try{ localStorage.setItem('check_h', String(S.checkH)); }catch(_){} }
+});
+document.addEventListener('dblclick', e => { if (e.target.closest && e.target.closest('.ckresize')){ S.checkH=0; try{ localStorage.removeItem('check_h'); }catch(_){} render(); } });
+
 async function act(fn, ...args){ toast('저장 중…'); const d = await call(fn, ...args); S.data = d; render(); toast('저장됨'); return d; }
 
 function parseDate(s){ const [y,m,d]=String(s).split('-').map(Number); return new Date(y, m-1, d); }
@@ -639,37 +693,69 @@ function seedEditSheet(){
     <div class="form-row"><button class="btn" id="seed-save">이름 변경 저장</button></div>`);
 }
 async function seedCall(fn, ...args){ toast('저장 중…'); const r=await callOnce(fn,args); S.data.seeds=r.seeds; S.data.seedList=r.seedList; render(); toast('저장됨'); return r; }
-/* ✅ 맨 위 체크리스트: 지난 미완료 + 오늘 + 3일 이내 일정, 그리고 할 일.
-   내가 정한 순서는 설정 시트의 관리폴더 JSON 안 '__checkorder' 키에 id 목록으로 저장(서버 재배포 없이 기기 간 동기화) */
-const CHECK_KEY='__checkorder';
-const checkOrder = () => ((S.data.folders||{})[CHECK_KEY]) || [];
-function checkGroups(){
-  const d=S.data, T=d.today, lim=addDays(T,3), ord=checkOrder();
-  const rank = (k, fb) => { const i=ord.indexOf(k); return i<0 ? 1e6+fb : i; };
-  const sch=(d.schedules||[]).filter(s=>!s.done && s.date && s.date<=lim).sort((a,b)=>(a.date+(a.time||'99')).localeCompare(b.date+(b.time||'99')));
-  const by = (list, key) => list.map((o,i)=>({o,k:key(o),r:rank(key(o),i)})).sort((a,b)=>a.r-b.r);
-  return [
-    ['late','⚠️ 지난 일정', by(sch.filter(s=>s.date<T), s=>'s:'+s.id), 'schedule'],
-    ['', '오늘', by(sch.filter(s=>s.date===T), s=>'s:'+s.id), 'schedule'],
-    ['', '3일 이내', by(sch.filter(s=>s.date>T), s=>'s:'+s.id), 'schedule'],
-    ['', '할 일', by((d.todos||[]).filter(t=>!t.done), t=>'t:'+t.id), 'todo'],
-  ];
+/* ✅ 맨 위 체크리스트: ⚠️ 지난 일정(자동) + 내가 만든 칸(긴급·중요·안 중요…).
+   칸 구성과 순서 = { buckets:[{id,name}], items:{칸id:[ 's:<일정id>' | 't:<할일id>' ]} }
+   → 서버 설정 「체크리스트」(uiSaveUiSetting), 서버가 아직 모르면 이 기기(localStorage)에 저장 */
+const DEF_BUCKETS = [{id:'b1',name:'🔥 긴급한 일'},{id:'b2',name:'⭐ 중요한 일'},{id:'b3',name:'🌿 안 중요한 일'}];
+function layout(){
+  let L = (S.data.uiset||{}).checklist;
+  if (!L) { try { L = JSON.parse(localStorage.getItem('check_layout')||'null'); } catch(_) { L = null; } }
+  if (!L || !Array.isArray(L.buckets) || !L.buckets.length) L = { buckets: DEF_BUCKETS.map(b=>Object.assign({},b)), items:{} };
+  L.items = L.items || {};
+  return L;
 }
-function checkRow(g, x, i, n){
-  const o=x.o, ed=S.checkEdit;
-  const mv = ed ? `<span class="mv"><button class="tbtn" data-cmove="${esc(x.k)}|-1" ${i?'':'disabled'} aria-label="위로">▲</button><button class="tbtn" data-cmove="${esc(x.k)}|1" ${i<n-1?'':'disabled'} aria-label="아래로">▼</button></span>` : '';
-  if (g[3]==='schedule') return schedRow(o, g[1]!=='오늘').replace('<button class="tbtn" data-edit-s', mv+'<button class="tbtn" data-edit-s');
-  return `<div class="row"><input type="checkbox" class="chk" data-done="todo:${esc(o.id)}">
-    <div class="body">${linkify(o.text)}<div class="meta">${o.source==='claude'?'브리핑에서 추가':'직접 추가'} · 마감 없음</div></div>
-    ${mv}<button class="tbtn" data-edit-t="${esc(o.id)}">편집</button></div>`;
+async function saveLayout(L){
+  S.data.uiset = Object.assign({}, S.data.uiset||{}, {checklist:L});
+  try { localStorage.setItem('check_layout', JSON.stringify(L)); } catch(_) {}
+  try { await callOnce('uiSaveUiSetting', ['checklist', L]); }
+  catch(e){ if (/알 수 없는 fn/.test(e && e.message || '')) { if (!S.layoutWarned){ S.layoutWarned=1; toast('이 기기에 저장했어요 · 서버 업데이트 후 폰·PC가 같아져요'); } } else toast('칸 저장 실패 · 다시 시도해 주세요'); }
+}
+const dayDiff = ds => Math.round((parseDate(ds) - parseDate(S.data.today)) / 864e5);
+function dTag(ds){
+  if (!ds) return '';
+  const n = dayDiff(ds);
+  if (n < 0) return `<span class="dtag late">${-n}일 지남</span>`;
+  return `<span class="dtag ${n<=3?'r':n<=7?'o':n<=14?'y':'g'}">${n===0?'D-day':'D-'+n}</span>`;
+}
+function checkItems(){
+  const d=S.data, lim=addDays(d.today,14), L=layout(), assigned=new Set(Object.values(L.items).flat());
+  return (d.schedules||[]).filter(s => !s.done && s.date && (s.date<=lim || assigned.has('s:'+s.id))).map(s => ({k:'s:'+s.id, type:'schedule', o:s, date:s.date}))
+    .concat((d.todos||[]).filter(t => !t.done).map(t => ({k:'t:'+t.id, type:'todo', o:t, date:''})));
+}
+function checkBuckets(){
+  const T=S.data.today, L=layout(), all=checkItems(), byKey={}; all.forEach(x => { byKey[x.k]=x; });
+  const late = all.filter(x => x.date && x.date < T).sort((a,b)=>a.date.localeCompare(b.date));
+  const lateK = new Set(late.map(x=>x.k));
+  const out = L.buckets.map(b => ({ b, list: (L.items[b.id]||[]).filter(k => byKey[k] && !lateK.has(k)).map(k => byKey[k]) }));
+  const placed = new Set(out.flatMap(o => o.list.map(x=>x.k)));
+  // 아직 칸이 없는 것: 3일 이내 마감 → 첫 칸, 나머지 → 둘째 칸
+  all.filter(x => !lateK.has(x.k) && !placed.has(x.k)).sort((a,b)=>(a.date||'9999').localeCompare(b.date||'9999'))
+    .forEach(x => { const tgt = (x.date && dayDiff(x.date) <= 3) ? out[0] : (out[1] || out[out.length-1]); if (tgt) tgt.list.push(x); });
+  return { late, out, L };
+}
+function ckRow(x, drag){
+  const o=x.o, title = x.type==='schedule' ? o.title : o.text;
+  const meta = x.type==='schedule' ? `${md(o.date)}${o.time?' '+esc(o.time):''}${o.gcalId?' · 📅':''}${o.recurring?' 🔁':''}`
+                                   : `${o.source==='claude'?'브리핑에서 추가':'직접 추가'} · 마감 없음`;
+  return `<div class="ck" data-ck="${esc(x.k)}">${drag?'<span class="grip" title="끌어서 옮기기">⠿</span>':'<span class="grip off"></span>'}
+    <input type="checkbox" class="chk" data-done="${x.type}:${esc(o.id)}">
+    <div class="body">${dTag(x.date)} <span class="tt">${linkify(title)}</span><div class="meta">${meta}</div></div>
+    <button class="tbtn" ${x.type==='schedule'?`data-edit-s="${esc(o.id)}"`:`data-edit-t="${esc(o.id)}"`}>편집</button></div>`;
 }
 function checklistCard(){
-  const d=S.data, gs=checkGroups(), n=gs.reduce((a,g)=>a+g[2].length,0);
+  const d=S.data, {late, out} = checkBuckets(), n = late.length + out.reduce((a,o)=>a+o.list.length,0), ed=S.checkEdit;
   const warn = d.calError ? `<div class="faint" style="color:var(--warn);margin-bottom:6px">📅 구글 캘린더 연결 안 됨 — Apps Script 편집기에서 <b>authorize</b> 함수를 한 번 실행해 권한을 허용해 주세요</div>` : '';
-  const body = gs.map(g => g[2].length ? `<div class="grp2 ${g[0]}">${g[1]} ${g[2].length}</div>${g[2].map((x,i)=>checkRow(g,x,i,g[2].length)).join('')}` : '').join('');
+  const lateHtml = late.length ? `<div class="bucket late"><div class="bh">⚠️ 지난 일정 <span class="count">${late.length}</span><span class="sp"></span><span class="faint hint" style="font-weight:400;font-size:11px">체크·편집으로 정리</span></div>${late.map(x=>ckRow(x,false)).join('')}</div>` : '';
+  const bk = out.map((o,i) => `<div class="bucket" data-bucket="${esc(o.b.id)}" style="--bk:var(--bk${i%5})">
+      <div class="bh">${esc(o.b.name)} <span class="count">${o.list.length}</span><span class="sp"></span>
+        <button class="tbtn" data-badd="${esc(o.b.id)}" title="이 칸에 할 일 추가">＋</button>
+        ${ed?`<button class="tbtn" data-bren="${esc(o.b.id)}" title="이름 바꾸기">✏️</button><button class="tbtn" data-bdel="${esc(o.b.id)}" title="칸 삭제">🗑</button>`:''}</div>
+      <div class="blist">${o.list.map(x=>ckRow(x,true)).join('') || '<div class="empty-b">⠿ 를 잡고 여기로 끌어다 놓기</div>'}</div></div>`).join('');
   return `<details class="card checklist" ${S.checkOpen===false?'':'open'}><summary>✅ 오늘 할 일 · 임박 ${n}건 <span class="faint">(눌러서 ${S.checkOpen===false?'펴기':'접기'})</span></summary>${warn}
-    <div class="tools" style="margin:0 0 4px"><button class="tbtn" id="todo-new">＋ 할 일</button><button class="tbtn ${S.checkEdit?'on':''}" id="check-edit">${S.checkEdit?'순서 편집 끝':'↕ 순서 바꾸기'}</button></div>
-    ${n?body:'<div class="faint">오늘·3일 이내 할 일이 없어요 🙌</div>'}</details>`;
+    <div class="tools" style="margin:0 0 6px"><button class="tbtn" id="todo-new">＋ 할 일</button><button class="tbtn ${ed?'on':''}" id="check-edit">${ed?'칸 편집 끝':'✏️ 칸 편집'}</button>
+      ${ed?'<button class="tbtn" id="bucket-add">＋ 칸 추가</button>':''}<span class="faint" style="margin-left:auto">⠿ 끌어서 옮기기</span></div>
+    <div class="ckbody" style="${S.checkH?`max-height:${S.checkH}px`:''}">${lateHtml}${bk}</div>
+    <div class="ckresize" title="끌어서 높이 조절 · 두 번 누르면 원래대로"><i></i></div></details>`;
 }
 function todoSheet(t){
   openSheet(`<h3>${t?'할 일 편집':'할 일 추가'}</h3>
@@ -1127,13 +1213,13 @@ document.addEventListener('click', async e => {
   const ds=t.dataset;
   if (t.closest('nav') && ds.tab){ if (S.tab===ds.tab && ds.tab==='manage') S.dom=null; S.tab=ds.tab; S.briefDate=null; window.scrollTo(0,0); render(); return; }
   if (t.id==='check-edit'){ S.checkEdit=!S.checkEdit; const y=window.scrollY; render(); window.scrollTo(0,y); return; }
-  if (ds.cmove){ const [k,dir]=ds.cmove.split('|'); const gs=checkGroups(), flat=gs.flatMap(g=>g[2].map(x=>x.k));
-    const g=gs.find(g=>g[2].some(x=>x.k===k)), keys=g[2].map(x=>x.k), i=keys.indexOf(k), j=i+(+dir); if (j<0||j>=keys.length) return;
-    [keys[i],keys[j]]=[keys[j],keys[i]];
-    const order = gs.flatMap(gg => gg===g ? keys : gg[2].map(x=>x.k)).slice(0,30);
-    S.data.folders = Object.assign({}, S.data.folders||{}, {[CHECK_KEY]: order});
-    quick(null, 'uiSaveFolders', CHECK_KEY, order); return; }
-  if (t.id==='todo-new'){ todoSheet(null); return; }
+  if (ds.badd){ S.addBucket=ds.badd; todoSheet(null); return; }
+  if (ds.bren){ const L=layout(), bb=L.buckets.find(x=>x.id===ds.bren); const v=prompt('칸 이름', bb?bb.name:''); if(!v||!v.trim()||!bb) return; bb.name=v.trim(); saveLayout(L); render(); return; }
+  if (ds.bdel){ const L=layout(); if (L.buckets.length<=1) return toast('칸이 하나는 있어야 해요'); const bb=L.buckets.find(x=>x.id===ds.bdel);
+    if(!confirm(`「${bb?bb.name:''}」 칸을 지울까요? 안의 항목은 다른 칸으로 자동 배치돼요.`)) return;
+    L.buckets=L.buckets.filter(x=>x.id!==ds.bdel); delete L.items[ds.bdel]; saveLayout(L); render(); return; }
+  if (t.id==='bucket-add'){ const v=prompt('새 칸 이름 (예: 📚 공부, 💼 인턴)'); if(!v||!v.trim()) return; const L=layout(); L.buckets.push({id:'b'+Date.now().toString(36), name:v.trim()}); saveLayout(L); render(); return; }
+  if (t.id==='todo-new'){ S.addBucket=null; todoSheet(null); return; }
   if (ds.editT){ todoSheet((S.data.todos||[]).find(x=>x.id===ds.editT)); return; }
   if (ds.due!==undefined && t.closest('#sheet')){ $('#t-due').value=ds.due; t.parentNode.querySelectorAll('button').forEach(b=>b.classList.toggle('on', b===t)); return; }
   if (t.id==='t-del'){ if(!confirm('이 할 일을 삭제할까요?')) return; closeSheet(); const id=ds.id; quick(()=>{ S.data.todos=S.data.todos.filter(x=>x.id!==id); }, 'uiDelete','todo',id); toast('삭제했어요'); return; }
@@ -1143,11 +1229,24 @@ document.addEventListener('click', async e => {
       const tmp={id:'tmp'+Date.now(), title:v, date:due, time:tm, done:false, source:'user'};
       S.data.schedules=(S.data.schedules||[]).concat([tmp]); if(id) S.data.todos=S.data.todos.filter(x=>x.id!==id);
       { const y=window.scrollY; render(); window.scrollTo(0,y); } QP++;
-      (async()=>{ try { let d=await call('uiSaveSchedule', {title:v, date:due, time:tm}); if(id) d=await call('uiDelete','todo',id); QP--; if(!QP){ S.data=d; if(!typing()) render(); } }
+      const bkt=S.addBucket; S.addBucket=null;
+      (async()=>{ try { let d=await call('uiSaveSchedule', {title:v, date:due, time:tm}); if(id) d=await call('uiDelete','todo',id);
+          const ns=(d.schedules||[]).filter(x=>x.title===v && x.date===due).sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)))[0];
+          if (ns){ const L=layout(); let hit=false; Object.keys(L.items).forEach(b=>{ L.items[b]=L.items[b].map(k=>{ if(k==='t:'+id){ hit=true; return 's:'+ns.id; } return k; }); });
+            if (!hit && bkt) (L.items[bkt]=L.items[bkt]||[]).unshift('s:'+ns.id); d.uiset=Object.assign({},d.uiset||{},{checklist:L}); saveLayout(L); }
+          QP--; if(!QP){ S.data=d; if(!typing()) render(); } }
         catch(e){ QP--; toast('저장 실패 · 다시 불러올게요'); try{ S.data=await call('uiLoad'); render(); }catch(_){} } })();
       toast(`📅 ${md(due)} 일정으로 저장 · 일정 탭·구글 캘린더에도 들어가요`); return; }
     if (id){ const o=S.data.todos.find(x=>x.id===id); quick(()=>{ if(o) o.text=v; }, 'uiSetEntry','todo',id,{text:v}); toast('수정했어요'); }
-    else { quick(()=>{ S.data.todos=[{id:'tmp'+Date.now(), text:v, done:false, source:'user', createdAt:nowIso()}].concat(S.data.todos||[]); }, 'uiAddTodo', v); toast('할 일을 추가했어요'); }
+    else { const bkt=S.addBucket; S.addBucket=null; const tmpId='tmp'+Date.now();
+      S.data.todos=[{id:tmpId, text:v, done:false, source:'user', createdAt:nowIso()}].concat(S.data.todos||[]);
+      if (bkt){ const L=layout(); (L.items[bkt]=L.items[bkt]||[]).unshift('t:'+tmpId); S.data.uiset=Object.assign({},S.data.uiset||{},{checklist:L}); }
+      { const y=window.scrollY; render(); window.scrollTo(0,y); } QP++; toast('할 일을 추가했어요');
+      (async()=>{ try { const d=await call('uiAddTodo', v);
+          if (bkt){ const nt=(d.todos||[]).filter(x=>x.text===v).sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)))[0];
+            const L=layout(); L.items[bkt]=(L.items[bkt]||[]).map(k=>k==='t:'+tmpId?(nt?'t:'+nt.id:null):k).filter(Boolean); d.uiset=Object.assign({},d.uiset||{},{checklist:L}); saveLayout(L); }
+          QP--; if(!QP){ S.data=d; if(!typing()) render(); } }
+        catch(e){ QP--; toast('저장 실패 · 다시 불러올게요'); try{ S.data=await call('uiLoad'); render(); }catch(_){} } })(); }
     return; }
   if (t.id==='rt-save'){ const v=$('#rt-token').value.trim(); if(!v) return;
     try { const r=await callOnce('uiSetRoutineToken',[v]); $('#rt-token').value=''; toast(r.message||'저장됨'); } catch(e){ toast(e.message||'저장 실패 · 서버 업데이트가 필요할 수 있어요'); } return; }
@@ -1358,7 +1457,7 @@ document.addEventListener('toggle', e => { const c=e.target.classList; if (!c) r
   if (c.contains('track')) { S.trackOpen = e.target.open; try{ localStorage.setItem('track_open', e.target.open?'1':'0'); }catch(_){} const f=e.target.querySelector('summary .faint'); if(f) f.textContent=`(눌러서 ${e.target.open?'접기':'펴기'})`; }
 }, true);
 try { if (localStorage.getItem('track_open')==='0') S.trackOpen=false; if (localStorage.getItem('seed_open')==='0') S.seedOpen=false; if (localStorage.getItem('check_open')==='0') S.checkOpen=false;
-  const sm=localStorage.getItem('seed_mode'); if (sm) S.seedMode=sm; const sk=localStorage.getItem('seed_kind'); if (sk) S.seedKind=sk; } catch(_){}
+  const sm=localStorage.getItem('seed_mode'); if (sm) S.seedMode=sm; S.checkH=+(localStorage.getItem('check_h')||0); const sk=localStorage.getItem('seed_kind'); if (sk) S.seedKind=sk; } catch(_){}
 window.addEventListener('resize', () => { clearTimeout(window.__rs); window.__rs=setTimeout(drawSeedCharts, 150); });
 document.addEventListener('input', e => {
   const t=e.target, ds=t.dataset;
