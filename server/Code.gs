@@ -816,7 +816,7 @@ function uiLoad(key) {
     .sort((a, b) => String(b.date).localeCompare(String(a.date)) || String(a.createdAt).localeCompare(String(b.createdAt)))
     .slice(0, 800);
   return { today: today_(), sections: SECTIONS, categories: CATEGORIES, domains: domains_(), tabs: tabs_(), folders: folders_(),
-    briefs, memos, items, schedules, todos, calError, uiset: uiSettings_(), seeds: seeds_(), seedList: seedList_(), seedMax: SEED_MAX,
+    briefs, memos, items, schedules, todos, calError, uiset: uiSettings_(), scriptId: ScriptApp.getScriptId(), seeds: seeds_(), seedList: seedList_(), seedMax: SEED_MAX,
     watchlist: { items: watchlist_(), prompt: getSetting_('지표공통프롬프트') } };
 }
 
