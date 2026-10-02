@@ -257,6 +257,30 @@ const CONN = (() => {
   return { url: h.get('u') || store('brief_api'), key: h.get('k') || store('brief_key') };
 })();
 const KEY = CONN.key;
+const DEFAULT_API = 'https://script.google.com/macros/s/AKfycbwsuyHhqjNXSUV3cqhV5UGpHW_CPZaMVxw5dhRRvTHFGHKprbdnp5yylkgCxSy3xreqFA/exec';
+/* 붙여 넣은 값에서 주소·키를 뽑는다: …#u=…&k=… / …/exec?k=… / 인증 키만 */
+function parseConn(v){
+  v = String(v||'').trim(); if (!v) return null;
+  const i = v.indexOf('#');
+  if (i >= 0) { const h = new URLSearchParams(v.slice(i+1)); if (h.get('u') && h.get('k')) return { u:h.get('u'), k:h.get('k') }; }
+  const m = v.match(/^(https:\/\/script\.google\.com\/[^?#\s]+\/exec)\?(?:.*&)?k=([^&#\s]+)/);
+  if (m) return { u:m[1], k:decodeURIComponent(m[2]) };
+  if (/^[A-Za-z0-9_-]{16,}$/.test(v)) return { u:DEFAULT_API, k:v };
+  return null;
+}
+function showConnect(msg){
+  $('#view').innerHTML = `<section class="card"><h2>${msg?'연결 다시 설정':'처음 연결'}</h2>
+    ${msg?`<div class="muted" style="margin-bottom:8px;color:var(--warn)">${esc(msg)}</div>`:''}
+    <div class="muted" style="margin-bottom:8px">구글 시트 「아침 브리핑」 → 메뉴 <b>브리핑 앱 → 앱 주소·키 다시 보기</b>에 나오는 <b>인증 키</b>(또는 앱 주소 전체)를 붙여 넣으세요. 이 기기에만 저장됩니다.</div>
+    <textarea id="conn-in" placeholder="인증 키 또는 https://…/exec?k=…"></textarea>
+    <div class="form-row"><button class="btn" id="conn-save">연결</button></div></section>`;
+  $('#conn-save').onclick = () => {
+    const c = parseConn($('#conn-in').value);
+    if (!c) return toast('키 또는 주소 형식을 확인해 주세요');
+    try { localStorage.setItem('brief_api', c.u); localStorage.setItem('brief_key', c.k); } catch (e) {}
+    location.hash = ''; location.reload();
+  };
+}
 const S = { data:null, tab:'today', briefDate:null, open:{}, planSeg:'calendar', memoFilter:'all', memoAll:false,
   histUnseen:false, cal:null, selDay:null, dom:null, domEdit:false, histSeg:'items', month:null,
   folder:'*', folderEdit:false, showHidden:false, expand:{}, tabInit:false };
@@ -275,7 +299,9 @@ async function callOnce(fn, args){
   {
     const r = await fetch(CONN.url, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify({ key: KEY, action: 'ui', fn, args }) });
-    const d = await r.json();
+    const t = await r.text();
+    if (!t.trim().startsWith('{')) throw new Error('서버가 JSON 대신 오류 페이지를 보냈어요(잠시 후 ↻ 또는 연결 주소 확인)');
+    const d = JSON.parse(t);
     if (!d.ok) throw new Error(d.error || '오류가 났어요');
     return d.data;
   }
@@ -1025,19 +1051,10 @@ $('#sheetBg').addEventListener('click', e => { if (e.target.id==='sheetBg') clos
 document.addEventListener('keydown', e => { if (e.key==='Enter' && e.target.id && e.target.id.startsWith('cin-')) { const b=e.target.parentNode.querySelector('[data-cmt]'); b && b.click(); }});
 
 if (!CONN.url || !CONN.key) {
-  $('#view').innerHTML = `<section class="card"><h2>처음 연결</h2>
-    <div class="muted" style="margin-bottom:8px">설치 때 받은 앱 주소(…#u=…&k=…) 전체를 붙여 넣으세요. 이 기기에만 저장됩니다.</div>
-    <textarea id="conn-in" placeholder="https://…#u=…&k=…"></textarea>
-    <div class="form-row"><button class="btn" id="conn-save">연결</button></div></section>`;
-  $('#conn-save').onclick = () => {
-    const v = $('#conn-in').value.trim(), i = v.indexOf('#');
-    const h = new URLSearchParams(i >= 0 ? v.slice(i + 1) : v);
-    if (!h.get('u') || !h.get('k')) return toast('주소 형식을 확인해 주세요');
-    try { localStorage.setItem('brief_api', h.get('u')); localStorage.setItem('brief_key', h.get('k')); } catch (e) {}
-    location.hash = 'u=' + encodeURIComponent(h.get('u')) + '&k=' + h.get('k'); location.reload();
-  };
+  showConnect();
 } else {
-  call('uiLoad').then(d => { S.data=d; render(); });
+  if (location.hash) history.replaceState(null, '', location.pathname + location.search);
+  call('uiLoad').then(d => { S.data=d; render(); }).catch(e => { if (!S.data) showConnect('서버에 연결하지 못했어요 (' + (e && e.message || '오류') + '). ↻로 다시 시도하거나, 키를 다시 넣어 주세요.'); });
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && S.data)
     call('uiLoad').then(d => { S.data=d; render(); }).catch(()=>{}); });
 }
