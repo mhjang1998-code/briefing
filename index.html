@@ -17,12 +17,16 @@
   --bg:#f4f5f7; --card:#fff; --ink:#15171a; --sub:#5d6470; --faint:#9aa1ab; --line:#e6e8ec;
   --accent:#2f6fed; --accent-soft:#e8effd; --up:#d9363e; --down:#2f6fed; --warn:#c2410c; --warn-soft:#fdeee4;
   --ok:#15803d; --chip:#eef0f3; --shadow:0 1px 2px rgba(16,24,40,.06);
+  --k-check:#d97706; --k-ind:#2563eb; --k-seed:#16a34a; --k-track:#7c3aed; --k-brief:#0e7490;
+  --k-ana:#2563eb; --k-think:#7c3aed; --k-dec:#16a34a; --k-etc:#d97706; --k-q:#db2777;
   --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100; --s5:#e87ba4; --s6:#008300; --s7:#4a3aa7; --s8:#e34948; --seed:#1f9d55;
 }
 @media (prefers-color-scheme: dark){:root{
   --bg:#0f1113; --card:#1a1d21; --ink:#eceef1; --sub:#a4abb6; --faint:#6b7280; --line:#2a2e34;
   --accent:#6b9bff; --accent-soft:#1d2a44; --up:#ff6b70; --down:#6b9bff; --warn:#fb923c; --warn-soft:#3a2416;
   --ok:#4ade80; --chip:#262a30; --shadow:none;
+  --k-check:#f59e0b; --k-ind:#60a5fa; --k-seed:#4ade80; --k-track:#a78bfa; --k-brief:#22d3ee;
+  --k-ana:#60a5fa; --k-think:#a78bfa; --k-dec:#4ade80; --k-etc:#f59e0b; --k-q:#f472b6;
   --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#d55181; --s6:#008300; --s7:#9085e9; --s8:#e66767; --seed:#4ade80;
 }}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -124,6 +128,15 @@ body.chat{padding-bottom:calc(140px + env(safe-area-inset-bottom))}
 .sw input:checked+span{background:var(--accent)} .sw input:checked+span::after{transform:translateX(18px)}
 .btn:disabled{opacity:.45} select{appearance:auto}
 .card.unseen{box-shadow:0 0 0 2px var(--accent)}
+/* 브리핑 탭 칸마다 은은한 색(배경 살짝 + 테두리 + 왼쪽 띠)으로 구분 */
+.card.checklist,.card.daily,.card.seedcard,.card.track,.card.bar,.card.item{--k:var(--k-brief);
+  background:color-mix(in srgb,var(--k) 5%,var(--card));border:1px solid color-mix(in srgb,var(--k) 28%,var(--line));border-left:4px solid var(--k)}
+.card.checklist{--k:var(--k-check)} .card.daily{--k:var(--k-ind)} .card.seedcard{--k:var(--k-seed)} .card.track{--k:var(--k-track)} .card.bar{--k:var(--k-brief)}
+.card.checklist>summary,.card.daily>summary,.card.seedcard>summary,.card.track>summary{color:color-mix(in srgb,var(--k) 75%,var(--ink))}
+.card.item{background:var(--card);border-left-width:3px}
+.card.item[data-sec="분석"]{--k:var(--k-ana)} .card.item[data-sec="생각·용어"]{--k:var(--k-think)} .card.item[data-sec="결정사항"]{--k:var(--k-dec)}
+.card.item[data-sec="기타"]{--k:var(--k-etc)} .card.item[data-sec="되묻는 질문"]{--k:var(--k-q)}
+.card.item .chip.sec{background:color-mix(in srgb,var(--k) 12%,var(--card));color:color-mix(in srgb,var(--k) 80%,var(--ink))}
 .card.is-seen .memo-text{color:var(--sub)}
 .chip.unseen{background:var(--accent);color:#fff;font-weight:700}
 .tbtn.seen{background:var(--accent);color:#fff;font-weight:700}
@@ -495,7 +508,7 @@ function itemCard(it, mode){
   const btn = mode==='record'
     ? `<button class="tbtn" data-seen="item|${esc(it.id)}|0">브리핑으로 되돌리기</button>`
     : `<button class="tbtn seen" data-seen="item|${esc(it.id)}|1">✓ 확인</button>`;
-  return `<section class="card item">
+  return `<section class="card item" data-sec="${esc(it.section||'')}">
     <div class="ihead">${!seen&&it.seenAt?'<span class="chip unseen">새 답글</span>':''}<span class="chip sec">${esc(it.section||'브리핑')}</span>
       ${it.study?`<span class="chip dom" style="margin-left:auto">🎓 ${esc(it.domain||'')}${it.folder?' › '+esc(it.folder):''}</span>`:''}
       ${it.hasNewComment?'<span class="chip new">답변 대기</span>':''}</div>
