@@ -220,9 +220,19 @@ nav .nb{position:absolute;top:0;left:50%;margin-left:6px;background:var(--up);co
 .dtag.late{background:color-mix(in srgb,var(--bkLate) 16%,var(--card));color:var(--bkLate)}
 .dtag.r{background:#fde2e2;color:#c81e1e} .dtag.o{background:#ffedd5;color:#c2410c} .dtag.y{background:#fef3c7;color:#a16207} .dtag.gr{background:#dcfce7;color:#15803d} .dtag.b{background:#dbeafe;color:#1d4ed8}
 @media (prefers-color-scheme: dark){ .dtag.r{background:#4a1d1d;color:#ff8a8a} .dtag.o{background:#43260f;color:#fdba74} .dtag.y{background:#3f3510;color:#fde047} .dtag.gr{background:#12341f;color:#86efac} .dtag.b{background:#172a4d;color:#93c5fd} }
-.ckresize{height:16px;margin:2px -16px -14px;display:flex;align-items:center;justify-content:center;cursor:ns-resize;touch-action:none}
-.ckresize i{width:44px;height:4px;border-radius:4px;background:var(--line)}
-.ckresize:hover i{background:var(--faint)}
+.rzb{overflow:auto;overscroll-behavior:contain}
+.rzh{height:14px;margin:2px 0 -8px;display:flex;align-items:center;justify-content:center;cursor:ns-resize;touch-action:none}
+.rzh i{width:44px;height:4px;border-radius:4px;background:var(--line)}
+.rzh:hover i{background:var(--faint)}
+.bucket .rzh{margin:0 0 -6px}
+.cksum{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+.cksum .ckc{font-size:12px;font-weight:700;background:var(--chip);border-radius:99px;padding:0 7px;color:var(--sub)}
+.cksum .dtag{margin:0}
+.cksum .sep{color:var(--line)} .cksum .sp{flex:1}
+.cksum .tbtn{padding:2px 9px}
+.bgrip{cursor:grab;touch-action:none;user-select:none;color:var(--faint);font-size:16px;line-height:18px;padding:0 1px;font-weight:400}
+.bucket.bph{opacity:.35;outline:2px dashed var(--bk);outline-offset:-2px}
+.bucket.bghost{position:fixed;z-index:50;pointer-events:none;box-shadow:0 8px 24px rgba(0,0,0,.25);opacity:.95;margin:0}
 .seedcard summary{cursor:pointer;font-weight:700;color:var(--sub);font-size:13px;list-style:none}
 .seedcard summary::-webkit-details-marker{display:none}
 .seedcard[open] summary{margin-bottom:8px}
@@ -412,35 +422,54 @@ async function quick(mutate, fn, ...args){
 }
 const nowIso = () => new Date().toISOString();
 const findEntry = (type, id) => type==='item' ? (S.data.items||[]).find(i=>i.id===id) : S.data.memos.find(m=>m.id===id);
-/* ── ⠿ 체크리스트 끌어서 옮기기 · 높이 조절 (마우스·터치 공통) ── */
-let CK=null, CKR=null;
+/* ── ↕ 카드 길이 조절: rz(키, 내용) → 내용 아래 손잡이. 높이는 이 기기(localStorage rz_h)에 저장 ── */
+function rz(k, inner, cls){ const h=(S.rz||{})[k]||0;
+  return `<div class="rzb ${cls||''}" data-rz="${esc(k)}" style="${h?`max-height:${h}px`:''}">${inner}</div><div class="rzh" data-rzk="${esc(k)}" title="끌어서 길이 조절 · 두 번 누르면 원래대로"><i></i></div>`; }
+function saveRz(){ const ks=Object.keys(S.rz||{}); if (ks.length>300) ks.slice(0,ks.length-300).forEach(k=>delete S.rz[k]); try{ localStorage.setItem('rz_h', JSON.stringify(S.rz||{})); }catch(_){} }
+/* ── ⠿ 체크리스트 끌어서 옮기기(항목·칸) · 길이 조절 (마우스·터치 공통) ── */
+let CK=null, CKR=null, CB=null;
+function edgeScroll(e, el){
+  const box=el && el.closest('.rzb');
+  if (box){ const b=box.getBoundingClientRect(); if (e.clientY < b.top+30) box.scrollTop-=14; else if (e.clientY > b.bottom-30) box.scrollTop+=14; }
+  if (e.clientY < 60) window.scrollBy(0,-14); else if (e.clientY > innerHeight-60) window.scrollBy(0,14);
+}
 document.addEventListener('pointerdown', e => {
   const g = e.target.closest && e.target.closest('.ck .grip:not(.off)');
   if (g){ e.preventDefault(); const row=g.closest('.ck'), r=row.getBoundingClientRect();
     const ghost=row.cloneNode(true); ghost.classList.add('ckghost'); Object.assign(ghost.style,{width:r.width+'px',left:r.left+'px',top:r.top+'px'}); document.body.appendChild(ghost);
     row.classList.add('ckph'); CK={row, ghost, dy:e.clientY-r.top}; return; }
-  const rz = e.target.closest && e.target.closest('.ckresize');
-  if (rz){ e.preventDefault(); const body=rz.parentNode.querySelector('.ckbody'); CKR={body, y:e.clientY, h:body.getBoundingClientRect().height}; }
+  const bg = e.target.closest && e.target.closest('.bgrip');
+  if (bg){ e.preventDefault(); const el=bg.closest('.bucket'), r=el.getBoundingClientRect();
+    const ghost=el.cloneNode(true); ghost.classList.add('bghost'); Object.assign(ghost.style,{width:r.width+'px',left:r.left+'px',top:r.top+'px',maxHeight:'160px',overflow:'hidden'}); document.body.appendChild(ghost);
+    el.classList.add('bph'); CB={el, ghost, dy:e.clientY-r.top}; return; }
+  const h = e.target.closest && e.target.closest('.rzh');
+  if (h){ e.preventDefault(); const body=h.previousElementSibling; CKR={body, key:h.dataset.rzk, y:e.clientY, h:body.getBoundingClientRect().height}; }
 });
 document.addEventListener('pointermove', e => {
   if (CK){ e.preventDefault(); CK.ghost.style.top=(e.clientY-CK.dy)+'px';
     const el=document.elementFromPoint(e.clientX, e.clientY), bk=el && el.closest('.bucket[data-bucket]'), list=bk && bk.querySelector('.blist');
     if (list){ const rows=[...list.querySelectorAll('.ck:not(.ckph)')], before=rows.find(r=>{ const b=r.getBoundingClientRect(); return e.clientY < b.top + b.height/2; });
       const emp=list.querySelector('.empty-b'); if (emp) emp.remove(); if (CK.row.nextSibling!==before || CK.row.parentNode!==list) list.insertBefore(CK.row, before||null); }
-    const body=CK.row.closest('.ckbody') || document.querySelector('.ckbody');
-    if (body){ const b=body.getBoundingClientRect(); if (e.clientY < b.top+36) body.scrollTop-=14; else if (e.clientY > b.bottom-36) body.scrollTop+=14; }
-    if (e.clientY < 60) window.scrollBy(0,-14); else if (e.clientY > innerHeight-60) window.scrollBy(0,14);
-    return; }
-  if (CKR){ e.preventDefault(); const h=Math.max(120, CKR.h + e.clientY - CKR.y); CKR.body.style.maxHeight=h+'px'; }
+    edgeScroll(e, el); return; }
+  if (CB){ e.preventDefault(); CB.ghost.style.top=(e.clientY-CB.dy)+'px';
+    const box=CB.el.parentNode, bks=[...box.children].filter(x=>x.classList.contains('bucket') && x!==CB.el);
+    const before=bks.find(b=>{ const r=b.getBoundingClientRect(); return e.clientY < r.top + r.height/2; });
+    if (CB.el.nextSibling!==before) box.insertBefore(CB.el, before||null);
+    edgeScroll(e, document.elementFromPoint(e.clientX, e.clientY)); return; }
+  if (CKR){ e.preventDefault(); const h=Math.max(50, CKR.h + e.clientY - CKR.y); CKR.body.style.maxHeight=h+'px'; }
 }, {passive:false});
 document.addEventListener('pointerup', () => {
   if (CK){ const {row, ghost}=CK; CK=null; ghost.remove(); row.classList.remove('ckph');
     const L=layout(); L.items={};
     document.querySelectorAll('.checklist .bucket[data-bucket]').forEach(b => { L.items[b.dataset.bucket]=[...b.querySelectorAll('.blist .ck')].map(r=>r.dataset.ck); });
     saveLayout(L); const y=window.scrollY; render(); window.scrollTo(0,y); return; }
-  if (CKR){ S.checkH=Math.round(CKR.body.getBoundingClientRect().height); CKR=null; try{ localStorage.setItem('check_h', String(S.checkH)); }catch(_){} }
+  if (CB){ const {el, ghost}=CB; CB=null; ghost.remove(); el.classList.remove('bph');
+    const L=layout(), ord=[...document.querySelectorAll('.checklist .bucket[data-bid]')].map(b=>b.dataset.bid);
+    document.querySelectorAll('.checklist .bucket[data-bucket]').forEach(b => { L.items[b.dataset.bucket]=[...b.querySelectorAll('.blist .ck')].map(r=>r.dataset.ck); }); // 칸 순서만 바뀌고 항목은 제자리
+    L.buckets.sort((a,b)=>ord.indexOf(a.id)-ord.indexOf(b.id)); saveLayout(L); const y=window.scrollY; render(); window.scrollTo(0,y); return; }
+  if (CKR){ S.rz=S.rz||{}; S.rz[CKR.key]=Math.round(parseFloat(CKR.body.style.maxHeight)||CKR.h); CKR=null; saveRz(); }
 });
-document.addEventListener('dblclick', e => { if (e.target.closest && e.target.closest('.ckresize')){ S.checkH=0; try{ localStorage.removeItem('check_h'); }catch(_){} render(); } });
+document.addEventListener('dblclick', e => { const h=e.target.closest && e.target.closest('.rzh'); if (h){ delete (S.rz||{})[h.dataset.rzk]; saveRz(); const y=window.scrollY; render(); window.scrollTo(0,y); } });
 
 async function act(fn, ...args){ toast('저장 중…'); const d = await call(fn, ...args); S.data = d; render(); toast('저장됨'); return d; }
 
@@ -566,7 +595,7 @@ function itemCard(it, mode){
     <div class="ihead">${!seen&&it.seenAt?'<span class="chip unseen">새 답글</span>':''}<span class="chip sec">${esc(it.section||'브리핑')}</span>
       ${it.study?`<span class="chip dom" style="margin-left:auto">🎓 ${esc(it.domain||'')}${it.folder?' › '+esc(it.folder):''}</span>`:''}
       ${it.hasNewComment?'<span class="chip new">답변 대기</span>':''}</div>
-    ${it.title?`<div class="ititle">${esc(it.title)}</div>`:''}${body}
+    ${rz('it:'+it.id, `${it.title?`<div class="ititle">${esc(it.title)}</div>`:''}${body}`)}
     <div class="tools">${btn}<button class="tbtn" data-toggle="${esc(k)}" data-state="${open?1:0}">💬 코멘트 ${nc||''}</button>
       <button class="tbtn ${it.pinned?'trk':''}" data-track="item|${esc(it.id)}|${it.pinned?0:1}">🎯${it.pinned?' 추적 중':' 추적'}</button>
       <button class="tbtn" data-study="item|${esc(it.id)}">🎓 공부로</button>
@@ -582,11 +611,11 @@ function trackedList(){
 function trackCard(){
   const list=trackedList(), b=S.data.briefs.find(x=>x.sec_tracking && String(x.sec_tracking).trim());
   if (!list.length && !b) return '';
-  return `<details class="card track" ${S.trackOpen===false?'':'open'}><summary>🎯 추적 중 ${list.length}건 <span class="faint">(눌러서 ${S.trackOpen===false?'펴기':'접기'})</span></summary>
+  return `<details class="card track" ${S.trackOpen===false?'':'open'}><summary>🎯 추적 중 ${list.length}건 <span class="faint">(눌러서 ${S.trackOpen===false?'펴기':'접기'})</span></summary>${rz('track', `
     ${b?`<div class="faint" style="margin:2px 0 4px">${md(b.date)} 진행 상황</div>${renderLines(b.sec_tracking)}`:''}
     ${list.length?`<div style="margin-top:10px">${list.map(t=>`<div class="trow"><div class="tx"><div class="meta">${t.type==='memo'?'내 메모':'답변'} · ${md(t.date)}${t.o.domain?' · '+esc(t.o.domain):''}</div><div class="tt">${esc(t.title)}</div></div>
       <button class="tbtn" data-track="${t.type}|${esc(t.id)}|0">추적 해제</button></div>`).join('')}</div>`
-      :`<div class="faint" style="margin-top:8px">추적 중인 항목이 없어요. 메모나 답변 카드의 🎯 버튼을 누르면 매일 진행 상황을 챙겨 드려요.</div>`}</details>`;
+      :`<div class="faint" style="margin-top:8px">추적 중인 항목이 없어요. 메모나 답변 카드의 🎯 버튼을 누르면 매일 진행 상황을 챙겨 드려요.</div>`}`)}</details>`;
 }
 /* ── 🌱 씨앗: 날짜·영역마다 0~3개. 탭할 때마다 +1, 3 다음은 0 ── */
 const SEED_COLORS = ['--s1','--s2','--s3','--s4','--s5','--s6','--s7','--s8'];
@@ -634,7 +663,7 @@ function seedCard(where){
   const legend = view==='area' ? `<div class="slegend">${(d.seedList||[]).slice(0,8).map(n=>`<button class="${(S.seedOff||{})[n]?'off':''}" data-soff="${esc(n)}"><i style="background:${seedColor(n)}"></i>${esc(n)}</button>`).join('')}</div>` : '';
   const chart = `${ctrls}<div class="schart" data-schart="1"></div>${legend}<div class="faint" style="margin-top:4px">${mode==='week'?'최근 12주':'최근 12개월'} ${kind==='cum'?'누적 씨앗':(mode==='week'?'주마다 심은 씨앗':'달마다 심은 씨앗')} · 누르거나 올리면 수치</div>`;
   if (where==='today') return `<details class="card seedcard" ${S.seedOpen===false?'':'open'}><summary>🌱 씨앗 ${sum(()=>true)}개 쌓는 중 <span class="faint">(눌러서 ${S.seedOpen===false?'펴기':'접기'})</span></summary>
-    ${stats}${chart}<div style="margin-top:12px"><b style="font-size:13px">오늘 심은 씨앗</b><div style="margin-top:6px">${seedButtons(today)}</div></div></details>`;
+    ${rz('seed', `${stats}${chart}<div style="margin-top:12px"><b style="font-size:13px">오늘 심은 씨앗</b><div style="margin-top:6px">${seedButtons(today)}</div></div>`)}</details>`;
   return `<section class="card"><h2>🌱 씨앗 성장</h2>${stats}${chart}</section>`;
 }
 function drawSeedCharts(){
@@ -696,12 +725,14 @@ async function seedCall(fn, ...args){ toast('저장 중…'); const r=await call
 /* ✅ 맨 위 체크리스트: ⚠️ 지난 일정(자동) + 내가 만든 칸(긴급·중요·안 중요…).
    칸 구성과 순서 = { buckets:[{id,name}], items:{칸id:[ 's:<일정id>' | 't:<할일id>' ]} }
    → 서버 설정 「체크리스트」(uiSaveUiSetting), 서버가 아직 모르면 이 기기(localStorage)에 저장 */
+const LATE_NAME = '⚠️ 지난 일정';
 const DEF_BUCKETS = [{id:'b1',name:'🔥 긴급한 일'},{id:'b2',name:'⭐ 중요한 일'},{id:'b3',name:'🌿 안 중요한 일'}];
 function layout(){
   let L = (S.data.uiset||{}).checklist;
   if (!L) { try { L = JSON.parse(localStorage.getItem('check_layout')||'null'); } catch(_) { L = null; } }
   if (!L || !Array.isArray(L.buckets) || !L.buckets.length) L = { buckets: DEF_BUCKETS.map(b=>Object.assign({},b)), items:{} };
   L.items = L.items || {};
+  if (!L.lateOff && !L.buckets.some(b=>b.id==='late')) L.buckets.unshift({id:'late', name:LATE_NAME});
   return L;
 }
 async function saveLayout(L){
@@ -724,14 +755,15 @@ function checkItems(){
 }
 function checkBuckets(){
   const T=S.data.today, L=layout(), all=checkItems(), byKey={}; all.forEach(x => { byKey[x.k]=x; });
-  const late = all.filter(x => x.date && x.date < T).sort((a,b)=>a.date.localeCompare(b.date));
+  const lateOn = L.buckets.some(b=>b.id==='late');
+  const late = lateOn ? all.filter(x => x.date && x.date < T).sort((a,b)=>a.date.localeCompare(b.date)) : [];
   const lateK = new Set(late.map(x=>x.k));
-  const out = L.buckets.map(b => ({ b, list: (L.items[b.id]||[]).filter(k => byKey[k] && !lateK.has(k)).map(k => byKey[k]) }));
+  const out = L.buckets.filter(b=>b.id!=='late').map(b => ({ b, list: (L.items[b.id]||[]).filter(k => byKey[k] && !lateK.has(k)).map(k => byKey[k]) }));
   const placed = new Set(out.flatMap(o => o.list.map(x=>x.k)));
   // 아직 칸이 없는 것: 3일 이내 마감 → 첫 칸, 나머지 → 둘째 칸
   all.filter(x => !lateK.has(x.k) && !placed.has(x.k)).sort((a,b)=>(a.date||'9999').localeCompare(b.date||'9999'))
     .forEach(x => { const tgt = (x.date && dayDiff(x.date) <= 3) ? out[0] : (out[1] || out[out.length-1]); if (tgt) tgt.list.push(x); });
-  return { late, out, L };
+  return { late, out, L, lateOn };
 }
 function ckRow(x, drag){
   const o=x.o, title = x.type==='schedule' ? o.title : o.text;
@@ -742,20 +774,33 @@ function ckRow(x, drag){
     <div class="body">${dTag(x.date)} <span class="tt">${linkify(title)}</span><div class="meta">${meta}</div></div>
     <button class="tbtn" ${x.type==='schedule'?`data-edit-s="${esc(o.id)}"`:`data-edit-t="${esc(o.id)}"`}>편집</button></div>`;
 }
+const bIcon = n => { const m=String(n).match(/^\s*(\p{Extended_Pictographic}️?)/u); return m ? m[1] : esc(String(n).trim().slice(0,4)); };
 function checklistCard(){
-  const d=S.data, {late, out} = checkBuckets(), n = late.length + out.reduce((a,o)=>a+o.list.length,0), ed=S.checkEdit;
+  const d=S.data, {late, out, L, lateOn} = checkBuckets(), ed=S.checkEdit, nNormal=out.length;
   const warn = d.calError ? `<div class="faint" style="color:var(--warn);margin-bottom:6px">📅 구글 캘린더 연결 안 됨 — Apps Script 편집기에서 <b>authorize</b> 함수를 한 번 실행해 권한을 허용해 주세요</div>` : '';
-  const lateHtml = late.length ? `<div class="bucket late"><div class="bh">⚠️ 지난 일정 <span class="count">${late.length}</span><span class="sp"></span><span class="faint hint" style="font-weight:400;font-size:11px">체크·편집으로 정리</span></div>${late.map(x=>ckRow(x,false)).join('')}</div>` : '';
-  const bk = out.map((o,i) => `<div class="bucket" data-bucket="${esc(o.b.id)}" style="--bk:var(--bk${i%5})">
-      <div class="bh">${esc(o.b.name)} <span class="count">${o.list.length}</span><span class="sp"></span>
-        <button class="tbtn" data-badd="${esc(o.b.id)}" title="이 칸에 할 일 추가">＋</button>
-        ${ed?`<button class="tbtn" data-bren="${esc(o.b.id)}" title="이름 바꾸기">✏️</button><button class="tbtn" data-bdel="${esc(o.b.id)}" title="칸 삭제">🗑</button>`:''}</div>
-      <div class="blist">${o.list.map(x=>ckRow(x,true)).join('') || '<div class="empty-b">⠿ 를 잡고 여기로 끌어다 놓기</div>'}</div></div>`).join('');
-  return `<details class="card checklist" ${S.checkOpen===false?'':'open'}><summary>✅ 오늘 할 일 · 임박 ${n}건 <span class="faint">(눌러서 ${S.checkOpen===false?'펴기':'접기'})</span></summary>${warn}
-    <div class="tools" style="margin:0 0 6px"><button class="tbtn" id="todo-new">＋ 할 일</button><button class="tbtn ${ed?'on':''}" id="check-edit">${ed?'칸 편집 끝':'✏️ 칸 편집'}</button>
-      ${ed?'<button class="tbtn" id="bucket-add">＋ 칸 추가</button>':''}<span class="faint" style="margin-left:auto">⠿ 끌어서 옮기기</span></div>
-    <div class="ckbody" style="${S.checkH?`max-height:${S.checkH}px`:''}">${lateHtml}${bk}</div>
-    <div class="ckresize" title="끌어서 높이 조절 · 두 번 누르면 원래대로"><i></i></div></details>`;
+  const ctl = id => `<span class="bgrip" title="끌어서 칸 순서 바꾸기">⠿</span>`;
+  const edb = (id, canDel) => ed ? `<button class="tbtn" data-bren="${esc(id)}" title="이름 바꾸기">✏️</button>${canDel?`<button class="tbtn" data-bdel="${esc(id)}" title="칸 삭제">🗑</button>`:''}` : '';
+  let ci=0;
+  const cards = L.buckets.map(b => {
+    if (b.id==='late') return `<div class="bucket late" data-bid="late">
+      <div class="bh">${ctl()}${esc(b.name)} <span class="count">${late.length}</span><span class="sp"></span>${ed?'':'<span class="faint hint" style="font-weight:400;font-size:11px">체크·편집으로 정리</span>'}${edb('late', true)}</div>
+      ${rz('bk:late', late.map(x=>ckRow(x,false)).join('') || '<div class="empty-b">지난 일정 없음 👍</div>')}</div>`;
+    const o=out.find(x=>x.b.id===b.id), i=ci++;
+    return `<div class="bucket" data-bid="${esc(b.id)}" data-bucket="${esc(b.id)}" style="--bk:var(--bk${i%5})">
+      <div class="bh">${ctl()}${esc(b.name)} <span class="count">${o.list.length}</span><span class="sp"></span>
+        <button class="tbtn" data-badd="${esc(b.id)}" title="이 칸에 할 일 추가">＋</button>${edb(b.id, nNormal>1)}</div>
+      ${rz('bk:'+b.id, `<div class="blist">${o.list.map(x=>ckRow(x,true)).join('') || '<div class="empty-b">⠿ 를 잡고 여기로 끌어다 놓기</div>'}</div>`)}</div>`;
+  }).join('');
+  // 맨 위 요약: 칸별 개수 + 마감 D-3·D-7·D-14 (누적, 날짜 있는 것만)
+  const counts = L.buckets.map(b => `<span class="ckc" title="${esc(b.name)}">${bIcon(b.name)} ${b.id==='late'?late.length:out.find(x=>x.b.id===b.id).list.length}</span>`).join('');
+  const dd = [].concat(...out.map(o=>o.list)).filter(x=>x.date).map(x=>dayDiff(x.date)).filter(n=>n>=0);
+  const dc = n => dd.filter(x=>x<=n).length;
+  const dHtml = dd.some(n=>n<=14) ? `<span class="sep">│</span><span class="dtag r">D-3 ${dc(3)}</span><span class="dtag o">D-7 ${dc(7)}</span><span class="dtag y">D-14 ${dc(14)}</span>` : '';
+  return `<details class="card checklist" ${S.checkOpen===false?'':'open'}><summary class="cksum">✅ 체크리스트 ${counts}${dHtml}<span class="sp"></span>
+      <button class="tbtn ${ed?'on':''}" id="check-edit">${ed?'편집 끝':'✏️ 편집'}</button></summary>${warn}
+    <div class="tools" style="margin:0 0 6px"><button class="tbtn" id="todo-new">＋ 할 일</button>
+      ${ed?`<button class="tbtn" id="bucket-add">＋ 칸 추가</button>${lateOn?'':'<button class="tbtn" id="late-on">⚠️ 지난 일정 칸 다시 켜기</button>'}`:''}<span class="faint" style="margin-left:auto">${ed?'✏️ 이름 · 🗑 삭제 · ⠿ 순서':'⠿ 끌어서 옮기기'}</span></div>
+    ${rz('check', cards, 'ckbody')}</details>`;
 }
 function todoSheet(t){
   openSheet(`<h3>${t?'할 일 편집':'할 일 추가'}</h3>
@@ -769,7 +814,7 @@ function todoSheet(t){
 function indicatorsCard(){
   const b=S.data.briefs.find(x=>x.sec_indicators && String(x.sec_indicators).trim());
   if (!b) return '';
-  return `<details class="card daily" ${S.dailyOpen===false?'':'open'}><summary>📈 증시 · 관심 지표 · ${md(b.date)} <span class="faint">(눌러서 접기)</span></summary>${renderIndicators(b.sec_indicators)}</details>`;
+  return `<details class="card daily" ${S.dailyOpen===false?'':'open'}><summary>📈 증시 · 관심 지표 · ${md(b.date)} <span class="faint">(눌러서 접기)</span></summary>${rz('ind', renderIndicators(b.sec_indicators))}</details>`;
 }
 function viewToday(){
   const d=S.data, items=unseenList('item');
@@ -1212,12 +1257,13 @@ document.addEventListener('click', async e => {
   const t=e.target.closest('button, [data-open-b], input.chk'); if(!t) return;
   const ds=t.dataset;
   if (t.closest('nav') && ds.tab){ if (S.tab===ds.tab && ds.tab==='manage') S.dom=null; S.tab=ds.tab; S.briefDate=null; window.scrollTo(0,0); render(); return; }
-  if (t.id==='check-edit'){ S.checkEdit=!S.checkEdit; const y=window.scrollY; render(); window.scrollTo(0,y); return; }
+  if (t.id==='check-edit'){ e.preventDefault(); S.checkOpen=true; S.checkEdit=!S.checkEdit; const y=window.scrollY; render(); window.scrollTo(0,y); return; }
   if (ds.badd){ S.addBucket=ds.badd; todoSheet(null); return; }
   if (ds.bren){ const L=layout(), bb=L.buckets.find(x=>x.id===ds.bren); const v=prompt('칸 이름', bb?bb.name:''); if(!v||!v.trim()||!bb) return; bb.name=v.trim(); saveLayout(L); render(); return; }
-  if (ds.bdel){ const L=layout(); if (L.buckets.length<=1) return toast('칸이 하나는 있어야 해요'); const bb=L.buckets.find(x=>x.id===ds.bdel);
-    if(!confirm(`「${bb?bb.name:''}」 칸을 지울까요? 안의 항목은 다른 칸으로 자동 배치돼요.`)) return;
-    L.buckets=L.buckets.filter(x=>x.id!==ds.bdel); delete L.items[ds.bdel]; saveLayout(L); render(); return; }
+  if (ds.bdel){ const L=layout(), isLate=ds.bdel==='late'; if (!isLate && L.buckets.filter(x=>x.id!=='late').length<=1) return toast('칸이 하나는 있어야 해요'); const bb=L.buckets.find(x=>x.id===ds.bdel);
+    if(!confirm(isLate ? `「${bb?bb.name:''}」 칸을 지울까요? 지난 일정은 원래 칸(없으면 첫 칸)에 「N일 지남」으로 보여요. 편집에서 다시 켤 수 있어요.` : `「${bb?bb.name:''}」 칸을 지울까요? 안의 항목은 다른 칸으로 자동 배치돼요.`)) return;
+    if (isLate) L.lateOff=true; L.buckets=L.buckets.filter(x=>x.id!==ds.bdel); delete L.items[ds.bdel]; saveLayout(L); render(); return; }
+  if (t.id==='late-on'){ const L=layout(); L.lateOff=false; if (!L.buckets.some(b=>b.id==='late')) L.buckets.unshift({id:'late', name:LATE_NAME}); saveLayout(L); render(); return; }
   if (t.id==='bucket-add'){ const v=prompt('새 칸 이름 (예: 📚 공부, 💼 인턴)'); if(!v||!v.trim()) return; const L=layout(); L.buckets.push({id:'b'+Date.now().toString(36), name:v.trim()}); saveLayout(L); render(); return; }
   if (t.id==='todo-new'){ S.addBucket=null; todoSheet(null); return; }
   if (ds.editT){ todoSheet((S.data.todos||[]).find(x=>x.id===ds.editT)); return; }
@@ -1457,7 +1503,7 @@ document.addEventListener('toggle', e => { const c=e.target.classList; if (!c) r
   if (c.contains('track')) { S.trackOpen = e.target.open; try{ localStorage.setItem('track_open', e.target.open?'1':'0'); }catch(_){} const f=e.target.querySelector('summary .faint'); if(f) f.textContent=`(눌러서 ${e.target.open?'접기':'펴기'})`; }
 }, true);
 try { if (localStorage.getItem('track_open')==='0') S.trackOpen=false; if (localStorage.getItem('seed_open')==='0') S.seedOpen=false; if (localStorage.getItem('check_open')==='0') S.checkOpen=false;
-  const sm=localStorage.getItem('seed_mode'); if (sm) S.seedMode=sm; S.checkH=+(localStorage.getItem('check_h')||0); const sk=localStorage.getItem('seed_kind'); if (sk) S.seedKind=sk; } catch(_){}
+  const sm=localStorage.getItem('seed_mode'); if (sm) S.seedMode=sm; S.rz=JSON.parse(localStorage.getItem('rz_h')||'{}')||{}; if (+localStorage.getItem('check_h') && !S.rz.check) S.rz.check=+localStorage.getItem('check_h'); const sk=localStorage.getItem('seed_kind'); if (sk) S.seedKind=sk; } catch(_){}
 window.addEventListener('resize', () => { clearTimeout(window.__rs); window.__rs=setTimeout(drawSeedCharts, 150); });
 document.addEventListener('input', e => {
   const t=e.target, ds=t.dataset;
