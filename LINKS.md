@@ -8,8 +8,8 @@
 |---|---|
 | 📱 앱 (폰·PC) | https://mhjang1998-code.github.io/briefing/ |
 | 📊 구글 시트 「아침 브리핑」 | https://docs.google.com/spreadsheets/d/1rBpt0chrirrIrYuaREaA-3Omi9Go5wlayPWRe_ejI98/edit |
-| ⚙️ Apps Script 편집기 | 시트 메뉴 **확장 프로그램 → Apps Script** · 또는 https://script.google.com/home → 「아침 브리핑」 프로젝트 (편집기 직접 링크는 서버 v11 배포 뒤 `uiLoad.scriptId`로 `https://script.google.com/d/<scriptId>/edit`) |
-| 🚀 배포 관리 | Apps Script 편집기 오른쪽 위 **배포 → 배포 관리** |
+| ⚙️ Apps Script 편집기 | https://script.google.com/home/projects/1Rm1fJ8JY0MiXJPbgtQyD9NXJfEmC7TcgQS1540aookOyDH2N5f-OtCY8/edit (또는 시트 메뉴 **확장 프로그램 → Apps Script**) |
+| 🚀 배포 관리 | https://script.google.com/home/projects/1Rm1fJ8JY0MiXJPbgtQyD9NXJfEmC7TcgQS1540aookOyDH2N5f-OtCY8/edit → 오른쪽 위 **배포 → 배포 관리** |
 | 📄 서버 코드 원본 (복붙용) | https://raw.githubusercontent.com/mhjang1998-code/briefing/main/server/Code.gs |
 | ⚡ 루틴 (일일 브리핑) | https://claude.ai/code/routines → 「일일 브리핑」 (데스크톱 앱 창이 비면 크롬 주소창에 직접) |
 | 🗂️ 앱 저장소 | https://github.com/mhjang1998-code/briefing |
@@ -17,10 +17,10 @@
 ## 서버 재배포 지시 템플릿 (그대로 복사해서 안내)
 
 1. 서버 코드 열기 👉 https://raw.githubusercontent.com/mhjang1998-code/briefing/main/server/Code.gs → 페이지 클릭 → **Ctrl+A → Ctrl+C**
-2. 구글 시트 👉 https://docs.google.com/spreadsheets/d/1rBpt0chrirrIrYuaREaA-3Omi9Go5wlayPWRe_ejI98/edit → **확장 프로그램 → Apps Script** (또는 https://script.google.com/home → 「아침 브리핑」)
+2. 구글 시트 👉 https://docs.google.com/spreadsheets/d/1rBpt0chrirrIrYuaREaA-3Omi9Go5wlayPWRe_ejI98/edit → (코드 붙여넣을 곳) Apps Script 편집기 👉 https://script.google.com/home/projects/1Rm1fJ8JY0MiXJPbgtQyD9NXJfEmC7TcgQS1540aookOyDH2N5f-OtCY8/edit
 3. `Code.gs` 안 클릭 → **Ctrl+A → Ctrl+V** → 💾 저장
 4. (새 권한이 필요한 버전만) 위쪽 함수 칸 `onOpen ▼` → **authorize** → ▷ 실행 → 권한 검토 → 고급 → 이동 → 허용
-5. **배포 → 배포 관리** → 연필 ✏️ → 버전: **새 버전** → 배포 (⚠️ 「새 배포」 금지 — 주소가 바뀜)
+5. 같은 편집기 👉 https://script.google.com/home/projects/1Rm1fJ8JY0MiXJPbgtQyD9NXJfEmC7TcgQS1540aookOyDH2N5f-OtCY8/edit → 오른쪽 위 **배포 → 배포 관리** → 연필 ✏️ → 버전: **새 버전** → 배포 (⚠️ 「새 배포」 금지 — 주소가 바뀜)
 6. 앱 👉 https://mhjang1998-code.github.io/briefing/ → **Ctrl+Shift+R** (폰은 앱 닫았다 다시 열기)
 
 ## 새 기기 연결 템플릿
