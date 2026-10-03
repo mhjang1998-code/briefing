@@ -220,13 +220,18 @@ nav .nb{position:absolute;top:0;left:50%;margin-left:6px;background:var(--up);co
 .bucket .bh{display:flex;align-items:center;gap:6px;font-weight:800;font-size:14px;color:color-mix(in srgb,var(--bk) 70%,var(--ink));margin-bottom:2px}
 .bucket .bh .count{background:var(--chip);border-radius:99px;padding:0 7px;font-size:11px;color:var(--sub);font-weight:600}
 .bucket .bh .sp{flex:1} .bucket .bh{white-space:nowrap} .bucket .bh .tbtn{padding:2px 8px}
-.blist{min-height:34px}
+.blist{min-height:0} .editing .blist{min-height:34px}
+.bucket.empty{padding-bottom:6px} .bucket.empty .bh{margin-bottom:0}
 .empty-b{font-size:12px;color:var(--faint);border:1px dashed var(--line);border-radius:8px;padding:8px;text-align:center}
-.ck{display:flex;align-items:flex-start;gap:8px;padding:7px 0;border-top:1px solid color-mix(in srgb,var(--line) 70%,transparent);background:transparent}
+.ck{display:flex;align-items:flex-start;gap:8px;padding:5px 0;border-top:1px solid color-mix(in srgb,var(--line) 70%,transparent);background:transparent}
 .ck:first-child{border-top:0}
 .ck .grip{cursor:grab;touch-action:none;user-select:none;color:var(--faint);font-size:18px;line-height:22px;padding:0 2px;flex:none;width:16px}
 .ck .grip.off{cursor:default}
-.ck .body{flex:1;min-width:0;font-size:14px} .ck .meta{font-size:12px;color:var(--faint)}
+.ck .body{flex:1;min-width:0;font-size:14px;line-height:22px;cursor:pointer;border-radius:6px} .ck .body:hover{background:color-mix(in srgb,var(--line) 45%,transparent)}
+.ck .meta{font-size:11.5px;color:var(--faint);white-space:nowrap}
+.chev{display:inline-block;color:var(--faint);font-size:12px;transition:transform .15s;padding:0 2px}
+details:not([open])>summary .chev,.bar.folded .chev{transform:rotate(-90deg)}
+.bar .chev{border:0;background:none;cursor:pointer;font-size:13px}
 .ck.ckph{opacity:.35;outline:2px dashed var(--bk,var(--accent));outline-offset:-2px;border-radius:8px}
 .ckghost{position:fixed;z-index:50;pointer-events:none;background:var(--card);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.25);padding:6px 10px;opacity:.95}
 .dtag{display:inline-block;font-size:11px;font-weight:800;border-radius:6px;padding:1px 6px;margin-right:4px;vertical-align:1px}
@@ -650,7 +655,7 @@ function trackedList(){
 function trackCard(){
   const list=trackedList(), b=S.data.briefs.find(x=>x.sec_tracking && String(x.sec_tracking).trim());
   if (!list.length && !b) return '';
-  return `<details class="card track ${ED('track')?'editing':''}" ${S.trackOpen===false?'':'open'}><summary>${cardGrip('track')}🎯 추적 중 ${list.length}건<span class="sp"></span>${editBtn('track')}</summary>${rz('track', `
+  return `<details class="card track ${ED('track')?'editing':''}" ${S.trackOpen===false?'':'open'}><summary>${cardGrip('track')}🎯 추적 중 ${list.length}건<span class="sp"></span>${editBtn('track')}<span class="chev" title="눌러서 접기/펴기">▾</span></summary>${rz('track', `
     ${b?`<div class="faint" style="margin:2px 0 4px">${md(b.date)} 진행 상황</div>${renderLines(b.sec_tracking)}`:''}
     ${list.length?`<div style="margin-top:10px">${list.map(t=>`<div class="trow"><div class="tx"><div class="meta">${t.type==='memo'?'내 메모':'답변'} · ${md(t.date)}${t.o.domain?' · '+esc(t.o.domain):''}</div><div class="tt">${esc(t.title)}</div></div>
       <button class="tbtn" data-track="${t.type}|${esc(t.id)}|0">추적 해제</button></div>`).join('')}</div>`
@@ -701,7 +706,7 @@ function seedCard(where){
     <div class="seg"><button data-sview="total" class="${view==='total'?'on':''}">합계</button><button data-sview="area" class="${view==='area'?'on':''}">영역별</button></div></div>`;
   const legend = view==='area' ? `<div class="slegend">${(d.seedList||[]).slice(0,8).map(n=>`<button class="${(S.seedOff||{})[n]?'off':''}" data-soff="${esc(n)}"><i style="background:${seedColor(n)}"></i>${esc(n)}</button>`).join('')}</div>` : '';
   const chart = `${ctrls}<div class="schart" data-schart="1"></div>${legend}<div class="faint" style="margin-top:4px">${mode==='week'?'최근 12주':'최근 12개월'} ${kind==='cum'?'누적 씨앗':(mode==='week'?'주마다 심은 씨앗':'달마다 심은 씨앗')} · 누르거나 올리면 수치</div>`;
-  if (where==='today') return `<details class="card seedcard ${ED('seed')?'editing':''}" ${S.seedOpen===false?'':'open'}><summary>${cardGrip('seed')}🌱 씨앗 ${sum(()=>true)}개 쌓는 중<span class="sp"></span>${editBtn('seed')}</summary>
+  if (where==='today') return `<details class="card seedcard ${ED('seed')?'editing':''}" ${S.seedOpen===false?'':'open'}><summary>${cardGrip('seed')}🌱 씨앗 ${sum(()=>true)}개 쌓는 중<span class="sp"></span>${editBtn('seed')}<span class="chev" title="눌러서 접기/펴기">▾</span></summary>
     ${rz('seed', `${stats}${chart}<div style="margin-top:12px"><b style="font-size:13px">오늘 심은 씨앗</b><div style="margin-top:6px">${seedButtons(today)}</div></div>`, '', ED('seed'))}</details>`;
   return `<section class="card"><h2>🌱 씨앗 성장</h2>${stats}${chart}</section>`;
 }
@@ -806,12 +811,10 @@ function checkBuckets(){
 }
 function ckRow(x, drag){
   const o=x.o, title = x.type==='schedule' ? o.title : o.text;
-  const meta = x.type==='schedule' ? `${md(o.date)}${o.time?' '+esc(o.time):''}${o.gcalId?' · 📅':''}${o.recurring?' 🔁':''}`
-                                   : `${o.source==='claude'?'브리핑에서 추가':'직접 추가'} · 마감 없음`;
+  const meta = x.type==='schedule' ? ` <span class="meta">· ${md(o.date)}${o.time?' '+esc(o.time):''}${o.gcalId?' 📅':''}${o.recurring?' 🔁':''}</span>` : '';
   return `<div class="ck" data-ck="${esc(x.k)}">${drag==='pad'?'<span class="grip off"></span>':drag?'<span class="grip" title="끌어서 옮기기">⠿</span>':''}
     <input type="checkbox" class="chk" data-done="${x.type}:${esc(o.id)}">
-    <div class="body">${dTag(x.date)} <span class="tt">${linkify(title)}</span><div class="meta">${meta}</div></div>
-    <button class="tbtn" ${x.type==='schedule'?`data-edit-s="${esc(o.id)}"`:`data-edit-t="${esc(o.id)}"`}>편집</button></div>`;
+    <div class="body" title="눌러서 편집" ${x.type==='schedule'?`data-edit-s="${esc(o.id)}"`:`data-edit-t="${esc(o.id)}"`}>${dTag(x.date)}<span class="tt">${linkify(title)}</span>${meta}</div></div>`;
 }
 const bIcon = n => { const m=String(n).match(/^\s*(\p{Extended_Pictographic}️?)/u); return m ? m[1] : esc(String(n).trim().slice(0,4)); };
 function checklistCard(){
@@ -821,14 +824,14 @@ function checklistCard(){
   const edb = (id, canDel) => ed ? `<button class="tbtn" data-bren="${esc(id)}" title="이름 바꾸기">✏️</button>${canDel?`<button class="tbtn" data-bdel="${esc(id)}" title="칸 삭제">🗑</button>`:''}` : '';
   let ci=0;
   const cards = L.buckets.map(b => {
-    if (b.id==='late') return `<div class="bucket late" data-bid="late">
+    if (b.id==='late') return `<div class="bucket late ${!late.length&&!ed?'empty':''}" data-bid="late">
       <div class="bh">${ctl()}${esc(b.name)} <span class="count">${late.length}</span><span class="sp"></span>${edb('late', true)}</div>
-      ${rz('bk:late', late.map(x=>ckRow(x, ed?'pad':false)).join('') || '<div class="empty-b">지난 일정 없음 👍</div>', '', ed)}</div>`;
+      ${!late.length&&!ed ? '' : rz('bk:late', late.map(x=>ckRow(x, ed?'pad':false)).join('') || '<div class="empty-b">지난 일정 없음 👍</div>', '', ed)}</div>`;
     const o=out.find(x=>x.b.id===b.id), i=ci++;
-    return `<div class="bucket" data-bid="${esc(b.id)}" data-bucket="${esc(b.id)}" style="--bk:var(--bk${i%5})">
+    return `<div class="bucket ${!o.list.length&&!ed?'empty':''}" data-bid="${esc(b.id)}" data-bucket="${esc(b.id)}" style="--bk:var(--bk${i%5})">
       <div class="bh">${ctl()}${esc(b.name)} <span class="count">${o.list.length}</span><span class="sp"></span>
         <button class="tbtn" data-badd="${esc(b.id)}" title="이 칸에 할 일 추가">＋</button>${edb(b.id, nNormal>1)}</div>
-      ${rz('bk:'+b.id, `<div class="blist">${o.list.map(x=>ckRow(x,ed)).join('') || `<div class="empty-b">${ed?'⠿ 를 잡고 여기로 끌어다 놓기':'비어 있어요'}</div>`}</div>`, '', ed)}</div>`;
+      ${!o.list.length&&!ed ? '' : rz('bk:'+b.id, `<div class="blist">${o.list.map(x=>ckRow(x,ed)).join('') || '<div class="empty-b">⠿ 를 잡고 여기로 끌어다 놓기</div>'}</div>`, '', ed)}</div>`;
   }).join('');
   // 맨 위 요약: 칸별 개수 + 마감 D-3·D-7·D-14 (누적, 날짜 있는 것만)
   const counts = L.buckets.map(b => `<span class="ckc" title="${esc(b.name)}">${bIcon(b.name)} ${b.id==='late'?late.length:out.find(x=>x.b.id===b.id).list.length}</span>`).join('');
@@ -836,7 +839,7 @@ function checklistCard(){
   const dc = n => dd.filter(x=>x<=n).length;
   const dHtml = dd.some(n=>n<=14) ? `<span class="sep">│</span><span class="dtag r">D-3 ${dc(3)}</span><span class="dtag o">D-7 ${dc(7)}</span><span class="dtag y">D-14 ${dc(14)}</span>` : '';
   return `<details class="card checklist ${ed?'editing':''}" ${S.checkOpen===false?'':'open'}><summary class="cksum">${cardGrip('check')}✅ 체크리스트 ${counts}${dHtml}<span class="sp"></span>
-      <button class="tbtn edbtn" id="todo-new" title="할 일 추가">＋</button>${editBtn('check')}</summary>${warn}
+      <button class="tbtn edbtn" id="todo-new" title="할 일 추가">＋</button>${editBtn('check')}<span class="chev" title="눌러서 접기/펴기">▾</span></summary>${warn}
     ${ed?`<div class="tools" style="margin:0 0 6px"><button class="tbtn" id="bucket-add">＋ 칸 추가</button>${lateOn?'':'<button class="tbtn" id="late-on">⚠️ 지난 일정 칸 다시 켜기</button>'}<span class="faint" style="margin-left:auto">⠿ 끌기 · ✏️ 이름 · 🗑 삭제 · ━ 길이</span></div>`:''}
     ${rz('check', cards, 'ckbody', ed)}</details>`;
 }
@@ -852,14 +855,16 @@ function todoSheet(t){
 function indicatorsCard(){
   const b=S.data.briefs.find(x=>x.sec_indicators && String(x.sec_indicators).trim());
   if (!b) return '';
-  return `<details class="card daily ${ED('ind')?'editing':''}" ${S.dailyOpen===false?'':'open'}><summary>${cardGrip('ind')}📈 증시 · 관심 지표 · ${md(b.date)}<span class="sp"></span>${editBtn('ind')}</summary>${rz('ind', renderIndicators(b.sec_indicators, ED('ind')?'drag':'sort'), '', ED('ind'))}</details>`;
+  return `<details class="card daily ${ED('ind')?'editing':''}" ${S.dailyOpen===false?'':'open'}><summary>${cardGrip('ind')}📈 증시 · 관심 지표 · ${md(b.date)}<span class="sp"></span>${editBtn('ind')}<span class="chev" title="눌러서 접기/펴기">▾</span></summary>${rz('ind', renderIndicators(b.sec_indicators, ED('ind')?'drag':'sort'), '', ED('ind'))}</details>`;
 }
 const CARD_KEYS = ['check','ind','seed','track','brief'];
 function cardOrder(){ const c=(layout().cards||[]).filter(k=>CARD_KEYS.includes(k)); return c.concat(CARD_KEYS.filter(k=>!c.includes(k))); }
 function briefBlock(){
   const d=S.data, items=unseenList('item'), ed=ED('brief');
-  const bar = n => `<div class="card bar ${ed?'editing':''}">${cardGrip('brief')}<b>📋 일일 브리핑 ${n}건</b><span class="faint">${n?'[✓ 확인] → 📝 메모 탭에 저장':'새 브리핑이 없어요 👏'}</span><span class="sp"></span>${editBtn('brief')}</div>`;
+  const fold = S.briefOpen===false;
+  const bar = n => `<div class="card bar ${ed?'editing':''} ${fold&&n?'folded':''}">${cardGrip('brief')}<b data-bfold="1" style="cursor:pointer">📋 일일 브리핑 ${n}건</b><span class="faint">${n?'[✓ 확인] → 📝 메모 탭에 저장':'새 브리핑이 없어요 👏'}</span><span class="sp"></span>${editBtn('brief')}${n?'<button class="chev" data-bfold="1" title="눌러서 접기/펴기">▾</button>':''}</div>`;
   if (!items.length) return bar(0);
+  if (fold) return bar(items.length);
   let html = bar(items.length), last=null, buf='';
   const flush = () => { if (buf) { html += `<div class="bgrid">${buf}</div>`; buf=''; } };
   items.slice().sort((a,b)=>String(b.date).localeCompare(String(a.date))||String(a.createdAt).localeCompare(String(b.createdAt))).forEach(it => {
@@ -1319,7 +1324,9 @@ function readWlDraft(){
 }
 
 document.addEventListener('click', async e => {
-  const t=e.target.closest('button, [data-open-b], input.chk'); if(!t) return;
+  if (e.target.closest('a[href]')) return;
+  if (e.target.closest('[data-bfold]')){ S.briefOpen = S.briefOpen===false; try{ localStorage.setItem('brief_open', S.briefOpen?'1':'0'); }catch(_){} const y=window.scrollY; render(); window.scrollTo(0,y); return; }
+  const t=e.target.closest('button, [data-open-b], input.chk, .ck .body'); if(!t) return;
   const ds=t.dataset;
   if (t.closest('nav') && ds.tab){ if (S.tab===ds.tab && ds.tab==='manage') S.dom=null; S.tab=ds.tab; S.briefDate=null; window.scrollTo(0,0); render(); return; }
   if (ds.ed){ e.preventDefault(); S.ed=S.ed||{}; S.ed[ds.ed]=!S.ed[ds.ed];
@@ -1564,12 +1571,12 @@ document.addEventListener('touchend', e => {
   if (Math.abs(dx)>70 && Math.abs(dy)<50){ S.month=shiftMonth(S.month, dx<0?1:-1); render(); toast(`${+S.month.slice(5)}월`); }
 }, {passive:true});
 document.addEventListener('toggle', e => { const c=e.target.classList; if (!c) return;
-  if (c.contains('daily')) S.dailyOpen = e.target.open;
+  if (c.contains('daily')) { S.dailyOpen = e.target.open; try{ localStorage.setItem('daily_open', e.target.open?'1':'0'); }catch(_){} }
   if (c.contains('checklist')) { S.checkOpen = e.target.open; try{ localStorage.setItem('check_open', e.target.open?'1':'0'); }catch(_){} const f=e.target.querySelector('summary .faint'); if(f) f.textContent=`(눌러서 ${e.target.open?'접기':'펴기'})`; }
   if (c.contains('seedcard')) { S.seedOpen = e.target.open; try{ localStorage.setItem('seed_open', e.target.open?'1':'0'); }catch(_){} const f=e.target.querySelector('summary .faint'); if(f) f.textContent=`(눌러서 ${e.target.open?'접기':'펴기'})`; if (e.target.open) drawSeedCharts(); }
   if (c.contains('track')) { S.trackOpen = e.target.open; try{ localStorage.setItem('track_open', e.target.open?'1':'0'); }catch(_){} const f=e.target.querySelector('summary .faint'); if(f) f.textContent=`(눌러서 ${e.target.open?'접기':'펴기'})`; }
 }, true);
-try { if (localStorage.getItem('track_open')==='0') S.trackOpen=false; if (localStorage.getItem('seed_open')==='0') S.seedOpen=false; if (localStorage.getItem('check_open')==='0') S.checkOpen=false;
+try { if (localStorage.getItem('track_open')==='0') S.trackOpen=false; if (localStorage.getItem('seed_open')==='0') S.seedOpen=false; if (localStorage.getItem('check_open')==='0') S.checkOpen=false; if (localStorage.getItem('daily_open')==='0') S.dailyOpen=false; if (localStorage.getItem('brief_open')==='0') S.briefOpen=false;
   const sm=localStorage.getItem('seed_mode'); if (sm) S.seedMode=sm; S.rz=JSON.parse(localStorage.getItem('rz_h')||'{}')||{}; if (+localStorage.getItem('check_h') && !S.rz.check) S.rz.check=+localStorage.getItem('check_h'); const sk=localStorage.getItem('seed_kind'); if (sk) S.seedKind=sk; } catch(_){}
 window.addEventListener('resize', () => { clearTimeout(window.__rs); window.__rs=setTimeout(drawSeedCharts, 150); });
 document.addEventListener('input', e => {
