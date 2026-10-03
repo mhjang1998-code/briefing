@@ -183,6 +183,7 @@ nav .nb{position:absolute;top:0;left:50%;margin-left:6px;background:var(--up);co
 .ihead{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:6px}
 .ititle{font-weight:700;font-size:16px;margin:0 0 4px}
 .domsel{width:auto;font-size:12px;padding:1px 6px;border-radius:99px;background:var(--accent-soft);color:var(--accent);border:0;font-weight:700}
+.tpick{display:flex;gap:4px;flex:0 0 auto} .tpick select{width:auto;padding-left:8px;padding-right:8px}
 .tagsel{appearance:none;-webkit-appearance:none;padding:1px 9px;cursor:pointer}
 .fchips{display:flex;gap:6px;overflow-x:auto;padding:2px 0 8px;scrollbar-width:none} .fchips::-webkit-scrollbar{display:none}
 .fchips button{flex:none;border:1px solid var(--line);background:var(--card);color:var(--sub);border-radius:99px;padding:4px 11px;font-size:13px;font-weight:600;white-space:nowrap}
@@ -856,11 +857,18 @@ function checklistCard(){
     ${ed?`<div class="tools" style="margin:0 0 6px"><button class="tbtn" id="bucket-add">＋ 칸 추가</button>${lateOn?'':'<button class="tbtn" id="late-on">⚠️ 지난 일정 칸 다시 켜기</button>'}<span class="faint" style="margin-left:auto">⠿ 끌기 · ✏️ 이름 · 🗑 삭제 · ━ 길이</span></div>`:''}
     ${rz('check', cards, 'ckbody', ed)}</details>`;
 }
+// ⏰ 시간 고르기: 오전/오후 대신 24시간제(00~23시) + 분. 값은 숨은 input(id)에 "HH:MM" 또는 ""
+function timePick(id, val){
+  const [h,m] = String(val||'').split(':'), mins = ['00','10','20','30','40','50']; if (m && !mins.includes(m)) mins.push(m), mins.sort();
+  return `<span class="tpick"><input type="hidden" id="${id}" value="${esc(val||'')}">
+    <select data-tp="${id}" data-tpp="h" aria-label="시"><option value="">시간 없음</option>${Array.from({length:24},(_,i)=>String(i).padStart(2,'0')).map(x=>`<option value="${x}" ${x===h?'selected':''}>${x}시</option>`).join('')}</select>
+    <select data-tp="${id}" data-tpp="m" aria-label="분" ${h?'':'disabled'}>${mins.map(x=>`<option value="${x}" ${x===(m||'00')?'selected':''}>${x}분</option>`).join('')}</select></span>`;
+}
 function todoSheet(t){
   openSheet(`<h3>${t?'할 일 편집':'할 일 추가'}</h3>
     <textarea id="t-edit" style="min-height:70px" placeholder="무엇을 할까요?">${t?esc(t.text):''}</textarea>
     <div class="faint" style="margin-top:8px">마감일 (정하면 📅 일정 탭·구글 캘린더에도 들어가요)</div>
-    <div class="form-row" style="margin-top:4px"><input id="t-due" type="date"><input id="t-time" type="time" style="flex:0 0 120px"></div>
+    <div class="form-row" style="margin-top:4px"><input id="t-due" type="date">${timePick('t-time','')}</div>
     <div class="cats" style="margin-top:6px">${[['오늘',0],['내일',1],['모레',2],['+1주',7]].map(([l,n])=>`<button data-due="${addDays(S.data.today,n)}">${l}</button>`).join('')}<button data-due="">마감 없음</button></div>
     <div class="form-row">${t?`<button class="btn ghost" id="t-del" data-id="${esc(t.id)}" style="color:var(--up)">삭제</button>`:''}<button class="btn ghost" id="m-cancel">취소</button><button class="btn" id="t-save" data-id="${t?esc(t.id):''}">저장</button></div>`);
   setTimeout(()=>{ const e=$('#t-edit'); if(e) e.focus(); },50);
@@ -935,7 +943,7 @@ function viewCalendar(){
     ${seedCard('cal')}`}
     <section class="card"><h2>${md(sel)} ${sel===d.today?'· 오늘':''}</h2>
       ${daySched.map(s=>schedRow(s,false)).join('') || '<div class="faint">이 날 일정이 없어요</div>'}
-      <div class="form-row"><input id="d-title" placeholder="이 날짜에 일정 추가"><input id="d-time" type="time" style="flex:0 0 120px"></div>
+      <div class="form-row"><input id="d-title" placeholder="이 날짜에 일정 추가">${timePick('d-time','')}</div>
       <div class="form-row"><button class="btn" id="d-add">추가</button></div></section>
     ${dayMemos.length?`<div class="grp">이 날의 메모</div>${dayMemos.map(memoCard).join('')}`:''}`;
 }
@@ -946,7 +954,7 @@ function viewPlan(){
   if (seg==='schedule'){
     const open=d.schedules.filter(s=>!s.done), done=d.schedules.filter(s=>s.done).slice(-15).reverse();
     html += `<section class="card"><h2>새 일정</h2><input id="s-title" placeholder="무엇을">
-      <div class="form-row"><input id="s-date" type="date" value="${d.today}"><input id="s-time" type="time"></div>
+      <div class="form-row"><input id="s-date" type="date" value="${d.today}">${timePick('s-time','')}</div>
       <div class="form-row"><button class="btn" id="s-add">일정 추가</button></div></section>
       <section class="card"><h2>예정 <span class="count">${open.length}</span></h2>${open.map(s=>schedRow(s,true)).join('')||'<div class="empty">예정된 일정이 없어요</div>'}</section>`;
     if (done.length) html += `<section class="card"><h2>완료</h2>${done.map(s=>schedRow(s,true)).join('')}</section>`;
@@ -1345,7 +1353,7 @@ function entrySheet(type, id){
 }
 function schedSheet(s){
   openSheet(`<h3>일정 편집</h3><input id="e-title" value="${esc(s.title)}">
-    <div class="form-row"><input id="e-date" type="date" value="${esc(s.date)}"><input id="e-time" type="time" value="${esc(s.time||'')}"></div>
+    <div class="form-row"><input id="e-date" type="date" value="${esc(s.date)}">${timePick('e-time', s.time||'')}</div>
     <div class="form-row"><button class="btn ghost" id="e-del" data-id="${esc(s.id)}" style="color:var(--up)">삭제</button><button class="btn" id="e-save" data-id="${esc(s.id)}">저장</button></div>`);
 }
 
@@ -1570,6 +1578,8 @@ document.addEventListener('change', e => {
   if (t.id==='em-dom'){ const fs=foldersOf(t.value); $('#em-folder').innerHTML='<option value="">폴더 없음</option>'+fs.map(f=>`<option>${esc(f)}</option>`).join(''); return; }
   if (ds.setDom){ const [ty,id]=ds.setDom.split('|'); act('uiSetDomain', ty, id, t.value); }
   if (t.id==='h-date'){ S.hDate=t.value; render(); }
+  if (ds.tp){ const box=t.closest('.tpick'), h=box.querySelector('[data-tpp="h"]'), m=box.querySelector('[data-tpp="m"]');
+    m.disabled=!h.value; $('#'+ds.tp).value = h.value ? `${h.value}:${m.value||'00'}` : ''; }
   if (ds.setFolder){ const [ty,id]=ds.setFolder.split('|'); act('uiSetEntry', ty, id, {folder:t.value}); }
   if (ds.tabHide){ const h=S.tabDraft.hidden, x=ds.tabHide; if (t.checked){ if(!h.includes(x)) h.push(x); } else S.tabDraft.hidden=h.filter(y=>y!==x); }
   if (t.id==='link-q'){}
