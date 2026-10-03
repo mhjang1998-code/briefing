@@ -183,6 +183,13 @@ nav .nb{position:absolute;top:0;left:50%;margin-left:6px;background:var(--up);co
 .ihead{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:6px}
 .ititle{font-weight:700;font-size:16px;margin:0 0 4px}
 .domsel{width:auto;font-size:12px;padding:1px 6px;border-radius:99px;background:var(--accent-soft);color:var(--accent);border:0;font-weight:700}
+.tagsel{appearance:none;-webkit-appearance:none;padding:1px 9px;cursor:pointer}
+.fchips{display:flex;gap:6px;overflow-x:auto;padding:2px 0 8px;scrollbar-width:none} .fchips::-webkit-scrollbar{display:none}
+.fchips button{flex:none;border:1px solid var(--line);background:var(--card);color:var(--sub);border-radius:99px;padding:4px 11px;font-size:13px;font-weight:600;white-space:nowrap}
+.fchips button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.fchips button i{font-style:normal;opacity:.7;font-weight:400;margin-left:3px}
+.fchips.sub button{padding:2px 9px;font-size:12px}
+.fdate{display:flex;gap:6px;align-items:center;margin:0 0 6px} .fdate select{flex:1} .fdate .tbtn{padding:6px 12px}
 .chip.sec{background:var(--chip);color:var(--sub)}
 .chip.dom{background:var(--accent-soft);color:var(--accent);font-weight:700}
 .datehead{display:flex;align-items:baseline;gap:8px;margin:18px 2px 8px}
@@ -555,6 +562,12 @@ function folderSelect(type, id, dom, cur){
   const fs = foldersOf(dom); if (!fs.length) return '';
   return `<select class="domsel" data-set-folder="${type}|${esc(id)}" aria-label="폴더"><option value="">폴더 없음</option>${fs.map(f=>`<option ${f===cur?'selected':''}>${esc(f)}</option>`).join('')}</select>`;
 }
+// 주제 태그 = domain (메모·기록·공부 탭 공통). 아이콘은 화면 표시에만
+const TAG_ICON = {'투자':'💰','사업':'🏭','전공':'🔬','진로':'🧭','자아성찰':'🪞','계획':'🗓️','아이디어':'💡'};
+const tagName = t => t ? `${TAG_ICON[t]||'🏷️'} ${t}` : '🏷️ 태그 없음';
+function tagChip(type, id, cur){
+  return `<select class="domsel tagsel" data-set-dom="${type}|${esc(id)}" aria-label="주제 태그" title="눌러서 태그 바꾸기">${(cur?[]:['<option value="">🏷️ 태그 없음</option>']).concat(domains().map(x=>`<option value="${esc(x)}" ${x===cur?'selected':''}>${esc(tagName(x))}</option>`)).join('')}</select>`;
+}
 function domSelect(type, id, cur){
   return `<select class="domsel" data-set-dom="${type}|${esc(id)}" aria-label="관리 카테고리">${(cur?[]:['<option value="">분류 안 됨</option>']).concat(domains().map(x=>`<option ${x===cur?'selected':''}>${esc(x)}</option>`)).join('')}</select>`;
 }
@@ -637,7 +650,7 @@ function itemCard(it, mode){
     : `<button class="tbtn seen" data-seen="item|${esc(it.id)}|1">✓ 확인</button>`;
   return `<section class="card item" data-sec="${esc(it.section||'')}">
     <div class="ihead">${!seen&&it.seenAt?'<span class="chip unseen">새 답글</span>':''}<span class="chip sec">${esc(it.section||'브리핑')}</span>
-      ${it.study?`<span class="chip dom" style="margin-left:auto">🎓 ${esc(it.domain||'')}${it.folder?' › '+esc(it.folder):''}</span>`:''}
+      ${tagChip('item', it.id, it.domain)}${it.study?`<span class="chip dom" style="margin-left:auto">🎓${it.folder?' '+esc(it.folder):' 공부'}</span>`:''}
       ${it.hasNewComment?'<span class="chip new">답변 대기</span>':''}</div>
     ${rz('it:'+it.id, `${it.title?`<div class="ititle">${esc(it.title)}</div>`:''}${body}`, '', mode!=='record' && ED('brief'))}
     <div class="tools">${btn}<button class="tbtn" data-toggle="${esc(k)}" data-state="${open?1:0}">💬 코멘트 ${nc||''}</button>
@@ -950,7 +963,7 @@ function memoCard(m){
   return `<section class="card ${seen?'':'unseen'}">
     <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:6px">
       ${seen?'':'<span class="chip unseen">새 답글</span>'}<span class="faint">${ago(m.createdAt) || md(m.day)}</span>
-      ${m.category?`<span class="chip">${esc(m.category)}</span>`:''}${m.study?`<span class="chip dom">🎓 ${esc(m.domain||'')}${m.folder?' › '+esc(m.folder):''}</span>`:''}
+      ${tagChip('memo', m.id, m.domain)}${m.category?`<span class="chip">${esc(m.category)}</span>`:''}${m.study?`<span class="chip dom">🎓${m.folder?' '+esc(m.folder):' 공부'}</span>`:''}
       ${m.status==='new'?'<span class="chip new">다음 브리핑 대기</span>':''}${m.status==='note'?'<span class="chip">공부 노트</span>':''}${m.pinned?'<span class="chip pin">🎯 추적</span>':''}
       ${m.hasNewComment?'<span class="chip new">답변 대기</span>':''}</div>
     <div class="memo-text">${linkify(m.text)}</div>
@@ -964,7 +977,8 @@ function memoCard(m){
 }
 function viewMemo(){
   const d=S.data, f=S.memoFilter;
-  const filters=[['all','전체'],['unseen','새 답글'],['new','대기'],['pinned','🎯 추적'],['answers','Claude 답변'],['study','🎓 공부'],...d.categories.map(c=>[c,c])];
+  const filters=[['all','전체'],['unseen','새 답글'],['new','대기'],['pinned','🎯 추적'],['answers','Claude 답변'],['study','🎓 공부']];
+  const tagF = domains().map(t=>['tag:'+t, tagName(t), d.memos.filter(m=>m.domain===t).length]).filter(x=>x[2]);   // 🏷️ 주제 태그 (기록 탭과 같은 태그)
   // 확인한 답변 중 연결된 메모가 없는 것 → 따로 카드로
   const memoIds = new Set(d.memos.map(m=>m.id));
   const lone = (d.items||[]).filter(i => isSeen(i,'item') && !memoIdsOf(i).some(x=>memoIds.has(x)) && !i.hidden);
@@ -974,12 +988,14 @@ function viewMemo(){
   else if(f==='pinned'){ ms=ms.filter(m=>m.pinned); its=its.filter(i=>i.pinned); }
   else if(f==='answers'){ ms=ms.filter(m=>answersFor(m.id).some(i=>isSeen(i,'item'))); }
   else if(f==='study'){ ms=ms.filter(m=>m.study); its=its.filter(i=>i.study); }
+  else if(String(f).startsWith('tag:')){ const t=f.slice(4); ms=ms.filter(m=>m.domain===t); its=its.filter(i=>i.domain===t); }
   else if(f!=='all'){ ms=ms.filter(m=>m.category===f); its=[]; }
   let list = ms.map(m=>({k:'memo', day:m.day, at:m.createdAt, o:m})).concat(its.map(i=>({k:'item', day:i.date, at:i.seenAt||i.createdAt, o:i})))
     .sort((a,b)=>String(b.day).localeCompare(String(a.day)) || String(b.at).localeCompare(String(a.at)));
   let html = `<section class="card composer"><textarea id="memo-in" placeholder="떠오른 걸 적어 두세요 (Ctrl+Enter 저장). 아침 브리핑에서 정리·분류해 드려요."></textarea>
     <div class="form-row"><button class="btn ghost ${S.trackNext?'on':''}" id="memo-track" style="flex:none">🎯 추적</button><button class="btn" id="memo-send">저장</button></div></section>
-    <div class="cats" style="margin-top:0">${filters.map(([v,l])=>`<button data-mf="${esc(v)}" class="${f===v?'on':''}">${esc(l)}</button>`).join('')}</div>`;
+    <div class="cats" style="margin-top:0">${filters.map(([v,l])=>`<button data-mf="${esc(v)}" class="${f===v?'on':''}">${esc(l)}</button>`).join('')}</div>
+    ${tagF.length?`<div class="fchips">${tagF.map(([v,l,n])=>`<button data-mf="${esc(v)}" class="${f===v?'on':''}">${esc(l)}<i>${n}</i></button>`).join('')}</div>`:''}`;
   // ⏳ 답변 예정: 다음 브리핑에서 Claude가 답할 것(새 메모·내 댓글이 달린 메모/답변)
   const isPend = e => e.k==='memo' ? (e.o.status==='new' || e.o.hasNewComment) : !!e.o.hasNewComment;
   const pendItems = (d.items||[]).filter(i => isSeen(i,'item') && i.hasNewComment).map(i=>({k:'item', day:i.date, at:i.seenAt||i.createdAt, o:i}));
@@ -1014,8 +1030,25 @@ function viewHistory(){
       <div class="body"><div>${md(b.date)} ${b.pinned?'<span class="chip pin">고정</span>':''} ${b.hasNewComment?'<span class="chip new">새 댓글</span>':''}</div>
       <div class="meta">${esc(String(b.header||'').replace(/^📋\s*/,''))}</div></div><span class="faint">›</span></div>`).join('') || '<div class="empty">기록이 없어요</div>'}</section>`;
   }
-  const done = (d.items||[]).filter(i=>isSeen(i,'item'));
-  if (!done.length) return html + `<div class="empty">아직 확인한 답변이 없어요. [브리핑]에서 [✓ 확인]을 누르면 여기에 날짜별로 쌓여요.</div>`;
+  const all = (d.items||[]).filter(i=>isSeen(i,'item'));
+  if (!all.length) return html + `<div class="empty">아직 확인한 답변이 없어요. [브리핑]에서 [✓ 확인]을 누르면 여기에 날짜별로 쌓여요.</div>`;
+  // 🏷️ 주제 · 형식 · 날짜로 골라 보기 (서로 겹쳐서 적용)
+  const fT = x => !S.hTag || (S.hTag==='-' ? !x.domain : x.domain===S.hTag), fS = x => !S.hType || x.section===S.hType, fD = x => !S.hDate || x.date===S.hDate;
+  const cnt = (list, f) => list.filter(f).length;
+  const tags = domains().filter(t => all.some(x=>x.domain===t)).concat(all.some(x=>!x.domain)?['-']:[]);
+  const types = [...new Set(all.map(x=>x.section||'기타'))];
+  if (S.hTag && !tags.includes(S.hTag)) S.hTag=''; if (S.hType && !types.includes(S.hType)) S.hType='';
+  const base1 = all.filter(x=>fS(x)&&fD(x)), base2 = all.filter(x=>fT(x)&&fD(x));
+  const dates = [...new Set(all.filter(x=>fT(x)&&fS(x)).map(x=>x.date))].sort().reverse();
+  if (S.hDate && !dates.includes(S.hDate)) S.hDate='';
+  const di = dates.indexOf(S.hDate);
+  html += `<div class="fchips"><button data-htag="" class="${!S.hTag?'on':''}">전체<i>${base1.length}</i></button>${tags.map(t=>`<button data-htag="${esc(t)}" class="${S.hTag===t?'on':''}">${esc(t==='-'?'🏷️ 태그 없음':tagName(t))}<i>${cnt(base1, x=>t==='-'?!x.domain:x.domain===t)}</i></button>`).join('')}</div>
+    <div class="fchips sub"><button data-htype="" class="${!S.hType?'on':''}">모든 형식</button>${types.map(t=>`<button data-htype="${esc(t)}" class="${S.hType===t?'on':''}">${esc(t)}<i>${cnt(base2, x=>(x.section||'기타')===t)}</i></button>`).join('')}</div>
+    <div class="fdate"><button class="tbtn" data-hstep="1" ${!dates.length||di===dates.length-1?'disabled':''} title="이전 날짜">‹</button>
+      <select id="h-date"><option value="">📅 모든 날짜 (${dates.length}일)</option>${dates.map(x=>`<option value="${x}" ${x===S.hDate?'selected':''}>${md(x)}</option>`).join('')}</select>
+      <button class="tbtn" data-hstep="-1" ${!S.hDate||di<=0?'disabled':''} title="다음 날짜">›</button></div>`;
+  const done = all.filter(x=>fT(x)&&fS(x)&&fD(x));
+  if (!done.length) return html + `<div class="empty">조건에 맞는 기록이 없어요</div>`;
   let last=null, buf='';
   const flush = () => { if (buf) { html += `<div class="bgrid">${buf}</div>`; buf=''; } };
   done.slice().sort((a,b)=>String(b.date).localeCompare(String(a.date))||String(a.createdAt).localeCompare(String(b.createdAt))).forEach(it => {
@@ -1465,6 +1498,10 @@ document.addEventListener('click', async e => {
   if (t.id==='tab-cancel'){ S.tabDraft=null; closeSheet(); return; }
   if (t.id==='tab-save'){ const cfg=S.tabDraft; if(cfg.hidden.length>=cfg.order.length) return toast('탭이 하나는 보여야 해요'); closeSheet(); S.tabDraft=null; S.tabInit=false; await act('uiSaveTabs', cfg); return; }
   if (ds.hseg){ S.histSeg=ds.hseg; render(); return; }
+  if (ds.htag!==undefined){ S.hTag=ds.htag; render(); return; }
+  if (ds.htype!==undefined){ S.hType=ds.htype; render(); return; }
+  if (ds.hstep){ const sel=$('#h-date'), ds2=[...sel.options].map(o=>o.value).filter(Boolean), i=ds2.indexOf(S.hDate||'');
+    S.hDate = i<0 ? ds2[0] : (ds2[i + +ds.hstep] || S.hDate); window.scrollTo(0,0); render(); return; }
   if (t.id==='memo-send'){ sendChat($('#memo-in')); return; }
   if (ds.seen){ const [ty,id,v]=ds.seen.split('|'); t.disabled=true;
     const o = ty==='brief' ? S.data.briefs.find(b=>b.date===id) : findEntry(ty,id);
@@ -1532,6 +1569,7 @@ document.addEventListener('change', e => {
   if (t.id==='wl-cat'){ S.cat=t.value; render(); }
   if (t.id==='em-dom'){ const fs=foldersOf(t.value); $('#em-folder').innerHTML='<option value="">폴더 없음</option>'+fs.map(f=>`<option>${esc(f)}</option>`).join(''); return; }
   if (ds.setDom){ const [ty,id]=ds.setDom.split('|'); act('uiSetDomain', ty, id, t.value); }
+  if (t.id==='h-date'){ S.hDate=t.value; render(); }
   if (ds.setFolder){ const [ty,id]=ds.setFolder.split('|'); act('uiSetEntry', ty, id, {folder:t.value}); }
   if (ds.tabHide){ const h=S.tabDraft.hidden, x=ds.tabHide; if (t.checked){ if(!h.includes(x)) h.push(x); } else S.tabDraft.hidden=h.filter(y=>y!==x); }
   if (t.id==='link-q'){}
