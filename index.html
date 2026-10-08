@@ -254,6 +254,7 @@ details:not([open])>summary .chev,.bar.folded .chev{transform:rotate(-90deg)}
 .cksum{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
 .cksum .ckc{font-size:12px;font-weight:700;background:var(--chip);border-radius:99px;padding:0 7px;color:var(--sub)}
 .cksum .dtag{margin:0}
+.cksum .dcnt{font-weight:600} .cksum .dcnt b{font-weight:900;margin-left:2px}
 .cksum .sep{color:var(--line)} .cksum .sp{flex:1}
 .cksum .tbtn{padding:2px 9px}
 .bgrip{cursor:grab;touch-action:none;user-select:none;color:var(--faint);font-size:16px;line-height:18px;padding:0 1px;font-weight:400}
@@ -851,7 +852,7 @@ function checklistCard(){
   const counts = L.buckets.map(b => `<span class="ckc" title="${esc(b.name)}">${bIcon(b.name)} ${b.id==='late'?late.length:out.find(x=>x.b.id===b.id).list.length}</span>`).join('');
   const dd = [].concat(...out.map(o=>o.list)).filter(x=>x.date).map(x=>dayDiff(x.date)).filter(n=>n>=0);
   const dc = n => dd.filter(x=>x<=n).length;
-  const dHtml = dd.some(n=>n<=14) ? `<span class="sep">│</span><span class="dtag r">D-3 ${dc(3)}</span><span class="dtag o">D-7 ${dc(7)}</span><span class="dtag y">D-14 ${dc(14)}</span>` : '';
+  const dHtml = dd.some(n=>n<=14) ? `<span class="sep">│</span><span class="dtag r dcnt" title="3일 안에 마감">3일 내 <b>${dc(3)}</b></span><span class="dtag o dcnt" title="7일 안에 마감">7일 내 <b>${dc(7)}</b></span><span class="dtag y dcnt" title="14일 안에 마감">14일 내 <b>${dc(14)}</b></span>` : '';
   return `<details class="card checklist ${ed?'editing':''}" ${S.checkOpen===false?'':'open'}><summary class="cksum">${cardGrip('check')}✅ 체크리스트 ${counts}${dHtml}<span class="sp"></span>
       <button class="tbtn edbtn" id="todo-new" title="할 일 추가">＋</button>${editBtn('check')}<span class="chev" title="눌러서 접기/펴기">▾</span></summary>${warn}
     ${ed?`<div class="tools" style="margin:0 0 6px"><button class="tbtn" id="bucket-add">＋ 칸 추가</button>${lateOn?'':'<button class="tbtn" id="late-on">⚠️ 지난 일정 칸 다시 켜기</button>'}<span class="faint" style="margin-left:auto">⠿ 끌기 · ✏️ 이름 · 🗑 삭제 · ━ 길이</span></div>`:''}
