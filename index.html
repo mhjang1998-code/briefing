@@ -1657,6 +1657,22 @@ document.addEventListener('keydown', e => { if (e.key==='Enter' && e.target.id==
 $('#sheetBg').addEventListener('click', e => { if (e.target.id==='sheetBg') closeSheet(); });
 document.addEventListener('keydown', e => { if (e.key==='Enter' && e.target.id && e.target.id.startsWith('cin-')) { const b=e.target.parentNode.querySelector('[data-cmt]'); b && b.click(); }});
 
+// 🔄 새 버전 자동 적용: 브라우저가 옛 화면을 기억(캐시)해도, 서버의 파일 시각이 더 새로우면 주소에 ?v= 를 붙여 새로 연다
+async function checkUpdate(){
+  try {
+    if (location.protocol !== 'https:') return;
+    const r = await fetch(location.pathname + '?_=' + Date.now(), { method:'HEAD', cache:'no-store' });
+    const lm = r.headers.get('last-modified'); if (!lm) return;
+    const nv = new Date(lm).getTime(), cur = new Date(document.lastModified).getTime();
+    if (!(nv - cur > 60000) || sessionStorage.getItem('upd_to') === String(nv)) return;
+    if (typing() || $('#sheetBg').classList.contains('show')) return toast('🔄 새 버전이 있어요 · 입력을 마치면 새로고침해 주세요');
+    sessionStorage.setItem('upd_to', String(nv));   // 같은 버전으로 계속 새로고침하지 않도록
+    location.replace(location.pathname + '?v=' + nv + location.hash);
+  } catch (_) {}
+}
+setTimeout(checkUpdate, 1500); setInterval(checkUpdate, 30*60*1000);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkUpdate(); });
+
 if (!CONN.url || !CONN.key) {
   showConnect();
 } else {
