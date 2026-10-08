@@ -183,6 +183,17 @@ nav .nb{position:absolute;top:0;left:50%;margin-left:6px;background:var(--up);co
 .ihead{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:6px}
 .ititle{font-weight:700;font-size:16px;margin:0 0 4px}
 .domsel{width:auto;font-size:12px;padding:1px 6px;border-radius:99px;background:var(--accent-soft);color:var(--accent);border:0;font-weight:700}
+.ctags{display:flex;gap:4px;flex:none;margin-left:auto;align-self:center;flex-wrap:wrap;justify-content:flex-end;max-width:45%}
+.ctag{--tc:#9ca3af;border:1px solid color-mix(in srgb,var(--tc) 70%,var(--card));background:color-mix(in srgb,var(--tc) 24%,var(--card));color:var(--ink);border-radius:6px;padding:1px 7px;font-size:11.5px;font-weight:700;line-height:18px;white-space:nowrap;cursor:pointer}
+.ctag.white{background:#fff;color:#1f2937;border-color:#cfd4dc}
+.ctag.on{box-shadow:0 0 0 2px var(--tc)}
+.tagpick{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0;align-items:center} .tagpick .ctag{font-size:13px;padding:3px 10px}
+.tnew{display:flex;flex-direction:column;gap:6px;margin:4px 0 8px;padding:8px;border:1px dashed var(--line);border-radius:10px}
+.swatches{display:flex;flex-wrap:wrap;gap:7px}
+.swatches button{width:24px;height:24px;border-radius:50%;border:2px solid var(--line);background:var(--sw);padding:0;cursor:pointer}
+.swatches button.on{outline:2px solid var(--ink);outline-offset:2px}
+.ckfilter{display:flex;align-items:center;gap:6px;margin:0 0 6px;font-size:13px;color:var(--sub)}
+.tmrow{border-top:1px solid var(--line);padding:8px 0} .tmrow:first-child{border-top:0} .tmrow .form-row{margin:0 0 6px}
 .tpick{display:flex;gap:4px;flex:0 0 auto} .tpick select{width:auto;padding-left:8px;padding-right:8px}
 .tagsel{appearance:none;-webkit-appearance:none;padding:1px 9px;cursor:pointer}
 .fchips{display:flex;gap:6px;overflow-x:auto;padding:2px 0 8px;scrollbar-width:none} .fchips::-webkit-scrollbar{display:none}
@@ -812,6 +823,36 @@ function checkItems(){
   return (d.schedules||[]).filter(s => !s.done && s.date && (s.date<=lim || assigned.has('s:'+s.id))).map(s => ({k:'s:'+s.id, type:'schedule', o:s, date:s.date}))
     .concat((d.todos||[]).filter(t => !t.done).map(t => ({k:'t:'+t.id, type:'todo', o:t, date:''})));
 }
+/* 🏷️ 체크리스트 작업 태그: 체크리스트 설정에 { tagDefs:[{id,name,color}], tags:{'s:<id>'|'t:<id>':[tagId…]} } (폰·PC 공통) */
+const TAG_COLORS = [['white','#ffffff','흰색'],['gray','#9ca3af','회색'],['red','#ef4444','빨강'],['orange','#f97316','주황'],['yellow','#eab308','노랑'],['lime','#84cc16','연두'],
+  ['green','#22c55e','초록'],['teal','#14b8a6','청록'],['sky','#0ea5e9','하늘'],['blue','#3b82f6','파랑'],['purple','#8b5cf6','보라'],['pink','#ec4899','분홍']];
+const tcol = c => (TAG_COLORS.find(x=>x[0]===c)||TAG_COLORS[1])[1];
+const tagDefs = () => layout().tagDefs || [];
+const tagPill = (t, attrs, on) => `<button class="ctag ${t.color==='white'?'white':''} ${on?'on':''}" style="--tc:${tcol(t.color)}" ${attrs}>${esc(t.name)}</button>`;
+function setTags(L, key, arr){ L.tags = L.tags || {}; if (arr && arr.length) L.tags[key] = arr.slice(0,3); else delete L.tags[key]; }
+const keepLayout = L => { S.data.uiset = Object.assign({}, S.data.uiset||{}, {checklist:L}); };
+function swatches(forKey, cur){ return `<div class="swatches">${TAG_COLORS.map(([k,c,n])=>`<button title="${n}" style="--sw:${c}" class="${k===cur?'on':''}" data-tcol="${k}" data-tcolfor="${esc(forKey)}"></button>`).join('')}</div>`; }
+function renderTagPick(){
+  const box=$('#tagpick'); if (!box) return;
+  const sel=S.sheetTags||[], nm = $('#tnew-name') ? $('#tnew-name').value : (S.tnewName||'');
+  box.innerHTML = `<div class="tagpick">${tagDefs().map(t=>tagPill(t, `data-tpk="${t.id}"`, sel.includes(t.id)).replace('>'+esc(t.name), '>'+(sel.includes(t.id)?'✓ ':'')+esc(t.name))).join('')}
+      <button class="tbtn" data-tnew="1">＋ 새 태그</button></div>
+    ${S.tnewOpen?`<div class="tnew"><input id="tnew-name" placeholder="태그 이름 (예: 양분관리)" maxlength="14" value="${esc(nm)}">${swatches('tnew', S.tnewColor||'blue')}
+      <div class="form-row" style="margin:0"><button class="btn" id="tnew-add">태그 만들어 달기</button></div></div>`:''}`;
+}
+function tagSheetPart(key){ S.sheetTags = ((layout().tags||{})[key]||[]).slice(); S.tnewOpen=false; S.tnewName='';
+  return `<div class="faint" style="margin-top:10px">🏷️ 태그 (최대 3개 · 누르면 달기/빼기 · 이름·색·삭제는 체크리스트 ✏️ → 🏷️ 태그 관리)</div><div id="tagpick"></div>`; }
+function tagManageSheet(){
+  const L=layout(); S.tmDraft = S.tmDraft || (L.tagDefs||[]).map(t=>Object.assign({},t));
+  const used = id => Object.values(L.tags||{}).filter(a=>a.includes(id)).length;
+  openSheet(`<h3>🏷️ 태그 관리</h3><div class="faint" style="margin-bottom:6px">이름·색을 바꾸거나 안 쓰는 태그를 지워요. 지우면 달려 있던 곳에서도 빠져요.</div>
+    ${S.tmDraft.map(t=>`<div class="tmrow"><div class="form-row"><input data-tmname="${t.id}" value="${esc(t.name)}" maxlength="14"><span class="faint" style="flex:none;align-self:center">${used(t.id)}건</span>
+      <button class="tbtn" data-tmdel="${t.id}" style="flex:none">🗑</button></div>${swatches('tm:'+t.id, t.color)}</div>`).join('') || '<div class="empty">아직 태그가 없어요</div>'}
+    <div class="tnew"><input id="tm-new" placeholder="새 태그 이름" maxlength="14">${swatches('tmnew', S.tmNewColor||'blue')}<div class="form-row" style="margin:0"><button class="btn ghost" id="tm-add">＋ 추가</button></div></div>
+    <div class="form-row"><button class="btn ghost" id="tm-cancel">취소</button><button class="btn" id="tm-save">저장</button></div>`);
+  $('#sheet').style.maxHeight='92vh'; $('#sheet').style.overflow='auto';
+}
+const tmSync = () => document.querySelectorAll('[data-tmname]').forEach(i=>{ const t=S.tmDraft.find(x=>x.id===i.dataset.tmname); if(t) t.name=i.value; });
 function checkBuckets(){
   const T=S.data.today, L=layout(), all=checkItems(), byKey={}; all.forEach(x => { byKey[x.k]=x; });
   const lateOn = L.buckets.some(b=>b.id==='late');
@@ -829,24 +870,34 @@ function ckRow(x, drag){
   const meta = x.type==='schedule' ? ` <span class="meta">· ${md(o.date)}${o.time?' '+esc(o.time):''}${o.gcalId?' 📅':''}${o.recurring?' 🔁':''}</span>` : '';
   return `<div class="ck" data-ck="${esc(x.k)}">${drag==='pad'?'<span class="grip off"></span>':drag?'<span class="grip" title="끌어서 옮기기">⠿</span>':''}
     <input type="checkbox" class="chk" data-done="${x.type}:${esc(o.id)}">
-    <div class="body" title="눌러서 편집" ${x.type==='schedule'?`data-edit-s="${esc(o.id)}"`:`data-edit-t="${esc(o.id)}"`}>${dTag(x.date)}<span class="tt">${linkify(title)}</span>${meta}</div></div>`;
+    <div class="body" title="눌러서 편집" ${x.type==='schedule'?`data-edit-s="${esc(o.id)}"`:`data-edit-t="${esc(o.id)}"`}>${dTag(x.date)}<span class="tt">${linkify(title)}</span>${meta}</div>${tagPills(x.k)}</div>`;
 }
+function tagPills(k){ const ids=(layout().tags||{})[k]||[], defs=tagDefs(); const ts=ids.map(id=>defs.find(t=>t.id===id)).filter(Boolean);
+  return ts.length ? `<span class="ctags">${ts.map(t=>tagPill(t, `data-ctag="${t.id}" title="이 태그만 보기"`, S.ckTag===t.id)).join('')}</span>` : ''; }
 const bIcon = n => { const m=String(n).match(/^\s*(\p{Extended_Pictographic}️?)/u); return m ? m[1] : esc(String(n).trim().slice(0,4)); };
 function checklistCard(){
-  const d=S.data, {late, out, L, lateOn} = checkBuckets(), ed=ED('check'), nNormal=out.length;
+  const d=S.data, cb = checkBuckets(), {out, L, lateOn} = cb, nNormal=out.length;
+  // ⏰ 마감순(기본 켜짐): 칸 안에서 마감 있는 것 = 급한 순으로 위, 마감 없는 것은 그 아래 끌어 둔 순서
+  const sortOn = L.sortDue !== false, dk = x => x.date + ' ' + (x.o.time || '99:99');
+  if (sortOn) out.forEach(o => { o.list = o.list.filter(x=>x.date).sort((a,b)=>dk(a).localeCompare(dk(b))).concat(o.list.filter(x=>!x.date)); });
+  // 🏷️ 태그 필터: 태그를 누르면 그 태그 일만 (이때는 순서 끌기를 잠가 숨은 항목 배치를 지킨다)
+  if (S.ckTag && !tagDefs().some(t=>t.id===S.ckTag)) S.ckTag=null;
+  const tf = S.ckTag, keep = x => !tf || ((L.tags||{})[x.k]||[]).includes(tf);
+  const late = cb.late.filter(keep); out.forEach(o => { o.list = o.list.filter(keep); });
+  const ed = ED('check'), dr = ed && !tf;
   const warn = d.calError ? `<div class="faint" style="color:var(--warn);margin-bottom:6px">📅 구글 캘린더 연결 안 됨 — Apps Script 편집기에서 <b>authorize</b> 함수를 한 번 실행해 권한을 허용해 주세요</div>` : '';
-  const ctl = () => ed ? `<span class="bgrip" title="끌어서 칸 순서 바꾸기">⠿</span>` : '';
+  const ctl = () => dr ? `<span class="bgrip" title="끌어서 칸 순서 바꾸기">⠿</span>` : '';
   const edb = (id, canDel) => ed ? `<button class="tbtn" data-bren="${esc(id)}" title="이름 바꾸기">✏️</button>${canDel?`<button class="tbtn" data-bdel="${esc(id)}" title="칸 삭제">🗑</button>`:''}` : '';
   let ci=0;
   const cards = L.buckets.map(b => {
     if (b.id==='late') return `<div class="bucket late ${!late.length&&!ed?'empty':''}" data-bid="late">
       <div class="bh">${ctl()}${esc(b.name)} <span class="count">${late.length}</span><span class="sp"></span>${edb('late', true)}</div>
-      ${!late.length&&!ed ? '' : rz('bk:late', late.map(x=>ckRow(x, ed?'pad':false)).join('') || '<div class="empty-b">지난 일정 없음 👍</div>', '', ed)}</div>`;
+      ${!late.length&&!ed ? '' : rz('bk:late', late.map(x=>ckRow(x, dr?'pad':false)).join('') || '<div class="empty-b">지난 일정 없음 👍</div>', '', ed)}</div>`;
     const o=out.find(x=>x.b.id===b.id), i=ci++;
     return `<div class="bucket ${!o.list.length&&!ed?'empty':''}" data-bid="${esc(b.id)}" data-bucket="${esc(b.id)}" style="--bk:var(--bk${i%5})">
       <div class="bh">${ctl()}${esc(b.name)} <span class="count">${o.list.length}</span><span class="sp"></span>
         <button class="tbtn" data-badd="${esc(b.id)}" title="이 칸에 할 일 추가">＋</button>${edb(b.id, nNormal>1)}</div>
-      ${!o.list.length&&!ed ? '' : rz('bk:'+b.id, `<div class="blist">${o.list.map(x=>ckRow(x,ed)).join('') || '<div class="empty-b">⠿ 를 잡고 여기로 끌어다 놓기</div>'}</div>`, '', ed)}</div>`;
+      ${!o.list.length&&!ed ? '' : rz('bk:'+b.id, `<div class="blist">${o.list.map(x=>ckRow(x,dr)).join('') || '<div class="empty-b">⠿ 를 잡고 여기로 끌어다 놓기</div>'}</div>`, '', ed)}</div>`;
   }).join('');
   // 맨 위 요약: 칸별 개수 + 마감 D-3·D-7·D-14 (누적, 날짜 있는 것만)
   const counts = L.buckets.map(b => `<span class="ckc" title="${esc(b.name)}">${bIcon(b.name)} ${b.id==='late'?late.length:out.find(x=>x.b.id===b.id).list.length}</span>`).join('');
@@ -855,7 +906,8 @@ function checklistCard(){
   const dHtml = dd.some(n=>n<=14) ? `<span class="sep">│</span><span class="dtag r dcnt" title="3일 안에 마감">3일 내 <b>${dc(3)}</b></span><span class="dtag o dcnt" title="7일 안에 마감">7일 내 <b>${dc(7)}</b></span><span class="dtag y dcnt" title="14일 안에 마감">14일 내 <b>${dc(14)}</b></span>` : '';
   return `<details class="card checklist ${ed?'editing':''}" ${S.checkOpen===false?'':'open'}><summary class="cksum">${cardGrip('check')}✅ 체크리스트 ${counts}${dHtml}<span class="sp"></span>
       <button class="tbtn edbtn" id="todo-new" title="할 일 추가">＋</button>${editBtn('check')}<span class="chev" title="눌러서 접기/펴기">▾</span></summary>${warn}
-    ${ed?`<div class="tools" style="margin:0 0 6px"><button class="tbtn" id="bucket-add">＋ 칸 추가</button>${lateOn?'':'<button class="tbtn" id="late-on">⚠️ 지난 일정 칸 다시 켜기</button>'}<span class="faint" style="margin-left:auto">⠿ 끌기 · ✏️ 이름 · 🗑 삭제 · ━ 길이</span></div>`:''}
+    ${tf?`<div class="ckfilter">🏷️ ${tagPill(tagDefs().find(t=>t.id===tf), `data-ctag="${tf}"`, true)} 태그만 보는 중<button class="tbtn" data-ctag="${tf}" style="margin-left:auto">✕ 전체 보기</button></div>`:''}
+    ${ed?`<div class="tools" style="margin:0 0 6px"><button class="tbtn" id="bucket-add">＋ 칸 추가</button><button class="tbtn ${sortOn?'on':''}" id="sort-due">⏰ 마감순 ${sortOn?'켜짐':'꺼짐'}</button><button class="tbtn" id="tag-manage">🏷️ 태그 관리</button>${lateOn?'':'<button class="tbtn" id="late-on">⚠️ 지난 일정 칸 다시 켜기</button>'}<span class="faint" style="margin-left:auto">⠿ 끌기 · ✏️ 이름 · 🗑 삭제 · ━ 길이</span></div>`:''}
     ${rz('check', cards, 'ckbody', ed)}</details>`;
 }
 // ⏰ 시간 고르기: 오전/오후 대신 24시간제(00~23시) + 분. 값은 숨은 input(id)에 "HH:MM" 또는 ""
@@ -871,8 +923,9 @@ function todoSheet(t){
     <div class="faint" style="margin-top:8px">마감일 (정하면 📅 일정 탭·구글 캘린더에도 들어가요)</div>
     <div class="form-row" style="margin-top:4px"><input id="t-due" type="date">${timePick('t-time','')}</div>
     <div class="cats" style="margin-top:6px">${[['오늘',0],['내일',1],['모레',2],['+1주',7]].map(([l,n])=>`<button data-due="${addDays(S.data.today,n)}">${l}</button>`).join('')}<button data-due="">마감 없음</button></div>
+    ${tagSheetPart(t?'t:'+t.id:'')}
     <div class="form-row">${t?`<button class="btn ghost" id="t-del" data-id="${esc(t.id)}" style="color:var(--up)">삭제</button>`:''}<button class="btn ghost" id="m-cancel">취소</button><button class="btn" id="t-save" data-id="${t?esc(t.id):''}">저장</button></div>`);
-  setTimeout(()=>{ const e=$('#t-edit'); if(e) e.focus(); },50);
+  renderTagPick(); setTimeout(()=>{ const e=$('#t-edit'); if(e) e.focus(); },50);
 }
 function indicatorsCard(){
   const b=S.data.briefs.find(x=>x.sec_indicators && String(x.sec_indicators).trim());
@@ -1355,7 +1408,9 @@ function entrySheet(type, id){
 function schedSheet(s){
   openSheet(`<h3>일정 편집</h3><input id="e-title" value="${esc(s.title)}">
     <div class="form-row"><input id="e-date" type="date" value="${esc(s.date)}">${timePick('e-time', s.time||'')}</div>
+    ${tagSheetPart('s:'+s.id)}
     <div class="form-row"><button class="btn ghost" id="e-del" data-id="${esc(s.id)}" style="color:var(--up)">삭제</button><button class="btn" id="e-save" data-id="${esc(s.id)}">저장</button></div>`);
+  renderTagPick();
 }
 
 function readWlDraft(){
@@ -1380,33 +1435,60 @@ document.addEventListener('click', async e => {
     if(!confirm(isLate ? `「${bb?bb.name:''}」 칸을 지울까요? 지난 일정은 원래 칸(없으면 첫 칸)에 「N일 지남」으로 보여요. 편집에서 다시 켤 수 있어요.` : `「${bb?bb.name:''}」 칸을 지울까요? 안의 항목은 다른 칸으로 자동 배치돼요.`)) return;
     if (isLate) L.lateOff=true; L.buckets=L.buckets.filter(x=>x.id!==ds.bdel); delete L.items[ds.bdel]; saveLayout(L); render(); return; }
   if (t.id==='late-on'){ const L=layout(); L.lateOff=false; if (!L.buckets.some(b=>b.id==='late')) L.buckets.unshift({id:'late', name:LATE_NAME}); saveLayout(L); render(); return; }
+  if (ds.ctag){ e.preventDefault(); S.ckTag = S.ckTag===ds.ctag ? null : ds.ctag; S.checkOpen=true; const y=window.scrollY; render(); window.scrollTo(0,y); return; }
+  if (ds.tpk){ const a=S.sheetTags=S.sheetTags||[], i=a.indexOf(ds.tpk); if (i>=0) a.splice(i,1); else if (a.length>=3) return toast('태그는 3개까지 달 수 있어요'); else a.push(ds.tpk); renderTagPick(); return; }
+  if (ds.tnew){ S.tnewOpen=!S.tnewOpen; renderTagPick(); const i=$('#tnew-name'); if(i) i.focus(); return; }
+  if (ds.tcol){ const f=ds.tcolfor;
+    if (f==='tnew'){ S.tnewColor=ds.tcol; renderTagPick(); return; }
+    if (f==='tmnew'){ S.tmNewColor=ds.tcol; tmSync(); const nv=$('#tm-new').value; tagManageSheet(); $('#tm-new').value=nv; return; }
+    if (f.startsWith('tm:')){ tmSync(); const tt=S.tmDraft.find(x=>x.id===f.slice(3)); if(tt) tt.color=ds.tcol; const nv=$('#tm-new').value; tagManageSheet(); $('#tm-new').value=nv; return; } }
+  if (t.id==='tnew-add'){ const n=($('#tnew-name').value||'').trim(); if(!n) return toast('태그 이름을 적어 주세요');
+    const L=layout(); L.tagDefs=L.tagDefs||[]; let tg=L.tagDefs.find(x=>x.name===n);
+    if (!tg){ tg={id:'g'+Date.now().toString(36), name:n, color:S.tnewColor||'blue'}; L.tagDefs.push(tg); saveLayout(L); }
+    const a=S.sheetTags=S.sheetTags||[]; if (!a.includes(tg.id)){ if (a.length>=3) toast('태그는 3개까지 · 만들어만 뒀어요'); else a.push(tg.id); }
+    S.tnewOpen=false; $('#tnew-name').value=''; renderTagPick(); return; }
+  if (t.id==='tag-manage'){ S.tmDraft=null; tagManageSheet(); return; }
+  if (ds.tmdel){ tmSync(); const tt=S.tmDraft.find(x=>x.id===ds.tmdel); if (!confirm(`「${tt?tt.name:''}」 태그를 지울까요?`)) return; S.tmDraft=S.tmDraft.filter(x=>x.id!==ds.tmdel); const nv=$('#tm-new').value; tagManageSheet(); $('#tm-new').value=nv; return; }
+  if (t.id==='tm-add'){ tmSync(); const n=($('#tm-new').value||'').trim(); if(!n) return toast('태그 이름을 적어 주세요'); if (S.tmDraft.some(x=>x.name===n)) return toast('같은 이름이 있어요');
+    S.tmDraft.push({id:'g'+Date.now().toString(36), name:n, color:S.tmNewColor||'blue'}); tagManageSheet(); return; }
+  if (t.id==='tm-cancel'){ S.tmDraft=null; closeSheet(); return; }
+  if (t.id==='tm-save'){ tmSync(); const L=layout(), keep=S.tmDraft.map(x=>Object.assign({},x,{name:String(x.name).trim()})).filter(x=>x.name);
+    const ids=new Set(keep.map(x=>x.id)), live=new Set((S.data.schedules||[]).map(x=>'s:'+x.id).concat((S.data.todos||[]).map(x=>'t:'+x.id)));
+    L.tagDefs=keep; L.tags=L.tags||{}; Object.keys(L.tags).forEach(k=>{ const a=L.tags[k].filter(id=>ids.has(id)); if (!a.length || !live.has(k)) delete L.tags[k]; else L.tags[k]=a; });
+    S.tmDraft=null; closeSheet(); saveLayout(L); const y=window.scrollY; render(); window.scrollTo(0,y); toast('태그 저장됨'); return; }
+  if (t.id==='sort-due'){ const L=layout(); L.sortDue = L.sortDue===false; saveLayout(L); const y=window.scrollY; render(); window.scrollTo(0,y); toast(L.sortDue?'⏰ 마감 급한 순으로 정렬':'끌어 둔 순서대로'); return; }
   if (t.id==='bucket-add'){ const v=prompt('새 칸 이름 (예: 📚 공부, 💼 인턴)'); if(!v||!v.trim()) return; const L=layout(); L.buckets.push({id:'b'+Date.now().toString(36), name:v.trim()}); saveLayout(L); render(); return; }
   if (t.id==='todo-new'){ e.preventDefault(); S.addBucket=null; todoSheet(null); return; }
   if (ds.editT){ todoSheet((S.data.todos||[]).find(x=>x.id===ds.editT)); return; }
   if (ds.due!==undefined && t.closest('#sheet')){ $('#t-due').value=ds.due; t.parentNode.querySelectorAll('button').forEach(b=>b.classList.toggle('on', b===t)); return; }
   if (t.id==='t-del'){ if(!confirm('이 할 일을 삭제할까요?')) return; closeSheet(); const id=ds.id; quick(()=>{ S.data.todos=S.data.todos.filter(x=>x.id!==id); }, 'uiDelete','todo',id); toast('삭제했어요'); return; }
-  if (t.id==='t-save'){ const v=$('#t-edit').value.trim(), due=$('#t-due').value, tm=$('#t-time').value, id=ds.id; if(!v) return toast('내용을 적어 주세요');
+  if (t.id==='t-save'){ const v=$('#t-edit').value.trim(), due=$('#t-due').value, tm=$('#t-time').value, id=ds.id, tg=(S.sheetTags||[]).slice(); if(!v) return toast('내용을 적어 주세요');
     closeSheet();
     if (due){ // 마감일이 생기면 일정으로 옮긴다(일정 탭·구글 캘린더 연동)
       const tmp={id:'tmp'+Date.now(), title:v, date:due, time:tm, done:false, source:'user'};
       S.data.schedules=(S.data.schedules||[]).concat([tmp]); if(id) S.data.todos=S.data.todos.filter(x=>x.id!==id);
+      if (tg.length){ const L=layout(); setTags(L,'s:'+tmp.id,tg); keepLayout(L); }
       { const y=window.scrollY; render(); window.scrollTo(0,y); } QP++;
       const bkt=S.addBucket; S.addBucket=null;
       (async()=>{ try { let d=await call('uiSaveSchedule', {title:v, date:due, time:tm}); if(id) d=await call('uiDelete','todo',id);
           const ns=(d.schedules||[]).filter(x=>x.title===v && x.date===due).sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)))[0];
-          if (ns){ const L=layout(); let hit=false; Object.keys(L.items).forEach(b=>{ L.items[b]=L.items[b].map(k=>{ if(k==='t:'+id){ hit=true; return 's:'+ns.id; } return k; }); });
+          if (ns){ const L=layout(); let hit=false; setTags(L,'s:'+tmp.id,null); if(id) setTags(L,'t:'+id,null); setTags(L,'s:'+ns.id,tg); Object.keys(L.items).forEach(b=>{ L.items[b]=L.items[b].map(k=>{ if(k==='t:'+id){ hit=true; return 's:'+ns.id; } return k; }); });
             if (!hit){ const tb = bkt || (dayDiff(due)<=3 ? L.buckets[0].id : (L.buckets[1]||L.buckets[0]).id); (L.items[tb]=L.items[tb]||[]).unshift('s:'+ns.id); } d.uiset=Object.assign({},d.uiset||{},{checklist:L}); saveLayout(L); }
           QP--; if(!QP){ S.data=d; if(!typing()) render(); } }
         catch(e){ QP--; toast('저장 실패 · 다시 불러올게요'); try{ S.data=await call('uiLoad'); render(); }catch(_){} } })();
       toast(`📅 ${md(due)} 일정으로 저장 · 일정 탭·구글 캘린더에도 들어가요`); return; }
-    if (id){ const o=S.data.todos.find(x=>x.id===id); quick(()=>{ if(o) o.text=v; }, 'uiSetEntry','todo',id,{text:v}); toast('수정했어요'); }
+    if (id){ const o=S.data.todos.find(x=>x.id===id); const L=layout(), was=JSON.stringify((L.tags||{})['t:'+id]||[]);
+      if (was!==JSON.stringify(tg)){ setTags(L,'t:'+id,tg); await saveLayout(L); }
+      if (o && o.text===v){ const y=window.scrollY; render(); window.scrollTo(0,y); toast('저장했어요'); return; }
+      quick(()=>{ if(o) o.text=v; }, 'uiSetEntry','todo',id,{text:v}); toast('수정했어요'); }
     else { const bkt=S.addBucket; S.addBucket=null; const tmpId='tmp'+Date.now();
       S.data.todos=[{id:tmpId, text:v, done:false, source:'user', createdAt:nowIso()}].concat(S.data.todos||[]);
-      if (bkt){ const L=layout(); (L.items[bkt]=L.items[bkt]||[]).unshift('t:'+tmpId); S.data.uiset=Object.assign({},S.data.uiset||{},{checklist:L}); }
+      if (bkt||tg.length){ const L=layout(); if (bkt) (L.items[bkt]=L.items[bkt]||[]).unshift('t:'+tmpId); setTags(L,'t:'+tmpId,tg); keepLayout(L); }
       { const y=window.scrollY; render(); window.scrollTo(0,y); } QP++; toast('할 일을 추가했어요');
       (async()=>{ try { const d=await call('uiAddTodo', v);
-          if (bkt){ const nt=(d.todos||[]).filter(x=>x.text===v).sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)))[0];
-            const L=layout(); L.items[bkt]=(L.items[bkt]||[]).map(k=>k==='t:'+tmpId?(nt?'t:'+nt.id:null):k).filter(Boolean); d.uiset=Object.assign({},d.uiset||{},{checklist:L}); saveLayout(L); }
+          if (bkt||tg.length){ const nt=(d.todos||[]).filter(x=>x.text===v).sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)))[0];
+            const L=layout(); if (bkt) L.items[bkt]=(L.items[bkt]||[]).map(k=>k==='t:'+tmpId?(nt?'t:'+nt.id:null):k).filter(Boolean);
+            setTags(L,'t:'+tmpId,null); if (nt) setTags(L,'t:'+nt.id,tg); d.uiset=Object.assign({},d.uiset||{},{checklist:L}); saveLayout(L); }
           QP--; if(!QP){ S.data=d; if(!typing()) render(); } }
         catch(e){ QP--; toast('저장 실패 · 다시 불러올게요'); try{ S.data=await call('uiLoad'); render(); }catch(_){} } })(); }
     return; }
@@ -1550,7 +1632,9 @@ document.addEventListener('click', async e => {
   if (ds.editM){ memoSheet(S.data.memos.find(m=>m.id===ds.editM)); return; }
   if (ds.delM){ if(confirm('이 메모와 댓글을 삭제할까요?')) await act('uiDeleteMemo', ds.delM); return; }
   if (ds.editS){ schedSheet(S.data.schedules.find(s=>s.id===ds.editS)); return; }
-  if (t.id==='e-save'){ const s={id:ds.id,title:$('#e-title').value.trim(),date:$('#e-date').value,time:$('#e-time').value}; closeSheet(); await act('uiSaveSchedule', s); return; }
+  if (t.id==='e-save'){ const s={id:ds.id,title:$('#e-title').value.trim(),date:$('#e-date').value,time:$('#e-time').value}; closeSheet();
+    { const L=layout(), tg=S.sheetTags||[]; if (JSON.stringify((L.tags||{})['s:'+ds.id]||[])!==JSON.stringify(tg)){ setTags(L,'s:'+ds.id,tg); await saveLayout(L); } }
+    await act('uiSaveSchedule', s); return; }
   if (t.id==='e-del'){ if(confirm('일정을 삭제할까요?')){ closeSheet(); await act('uiDelete','schedule',ds.id); } return; }
   if (t.id==='s-add'){ const s={title:$('#s-title').value.trim(),date:$('#s-date').value,time:$('#s-time').value}; if(!s.title) return toast('제목을 적어 주세요'); await act('uiSaveSchedule', s); return; }
   if (t.id==='t-add'){ const v=$('#t-text').value; if(!v.trim()) return; await act('uiAddTodo', v); return; }
