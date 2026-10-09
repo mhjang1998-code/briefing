@@ -205,8 +205,10 @@ nav .nb{position:absolute;top:0;left:50%;margin-left:6px;background:var(--up);co
 .galtile .gb .ar{margin-left:auto}
 .galprev{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0} .galprev div{position:relative;width:72px;height:72px;border-radius:8px;overflow:hidden}
 .galprev img{width:100%;height:100%;object-fit:cover} .galprev button{position:absolute;top:2px;right:2px;border:0;border-radius:50%;width:20px;height:20px;background:rgba(0,0,0,.6);color:#fff;font-size:11px;line-height:20px;padding:0}
-.galview{display:flex;gap:6px;overflow-x:auto;scroll-snap-type:x mandatory;border-radius:12px;margin:0 -4px 8px}
-.galview img{flex:0 0 100%;max-height:62vh;object-fit:contain;background:#000;border-radius:12px;scroll-snap-align:center}
+.galview{display:flex;flex-direction:column;gap:8px;margin:0 0 8px}
+.galview img{width:100%;max-height:78vh;object-fit:contain;background:#000;border-radius:12px}
+.gporder .row{align-items:center;gap:8px;padding:6px 0} .gporder img{width:56px;height:56px;object-fit:cover;border-radius:8px;flex:none}
+.gporder .tbtn{padding:4px 9px}
 .galmeta{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-weight:700;font-size:14px;margin-bottom:2px}
 .gcm{padding:8px 0;border-top:1px solid var(--line)} .gcm.rep{margin-left:22px;border-top:1px dashed var(--line)}
 .gcm .gct{white-space:pre-wrap;font-size:14px} .gcm .gcmeta{font-size:11.5px;color:var(--faint);display:flex;gap:8px;align-items:center;margin-top:2px;flex-wrap:wrap}
@@ -537,6 +539,7 @@ document.addEventListener('pointerup', () => {
     document.querySelectorAll('.checklist .bucket[data-bucket]').forEach(b => { L.items[b.dataset.bucket]=[...b.querySelectorAll('.blist .ck')].map(r=>r.dataset.ck); });
     saveLayout(L); const y=window.scrollY; render(); window.scrollTo(0,y); return; }
   if (LD){ const {el, box, ghost}=LD; LD=null; ghost.remove(); el.classList.remove('lph'); S.noClick=Date.now();
+    if (box.dataset.lkind==='gphoto'){ galSaveOrder(S.galOpen, [...box.children].map(x=>x.dataset.litem).filter(Boolean)); S.galEditOpen=true; const sc=$('#sheet').scrollTop; galPostSheet(S.galOpen); $('#sheet').scrollTop=sc; return; }
     if (box.dataset.lkind==='sched' || box.dataset.lkind==='todo'){ const L=layout(); L[box.dataset.lkind+'Order']=[...box.children].map(x=>x.dataset.litem).filter(Boolean); saveLayout(L); const y=window.scrollY; render(); window.scrollTo(0,y); return; }
     if (box.dataset.lkind==='cards'){ box.classList.remove('cardsdrag'); const L=layout(); L.cards=[...box.children].map(x=>x.dataset.litem).filter(Boolean); saveLayout(L); const y=window.scrollY; render(); window.scrollTo(0,y); return; }
     saveWlOrder(box.dataset.lkind, [...box.children].filter(x=>x.dataset.litem!=null).map(x=>x.dataset.litem), el.dataset.litem); return; }
@@ -1060,6 +1063,9 @@ async function loadGallery(){
   catch(e){ S.gal = /알 수 없는 fn/.test(e.message||'') ? {unsupported:1} : {error:e.message||'오류'}; }
   S.galLoading=0; if (S.tab==='plan' && !$('#sheetBg').classList.contains('show')){ const y=window.scrollY; render(); window.scrollTo(0,y); }
 }
+// 사진 순서: 게시물 편집에서 바꾼 순서(앱 설정 galOrder, 폰·PC 공통) → 없으면 올린 순서
+function galPhotos(p){ return mergeOrder(p.photos||[], (layout().galOrder||{})[p.id], (a,b)=>(a.order||0)-(b.order||0)); }
+function galSaveOrder(id, ids){ const L=layout(); L.galOrder=L.galOrder||{}; L.galOrder[id]=ids; keepLayout(L); saveLayout(L); }
 function galleryCard(){
   if (!S.gal){ setTimeout(loadGallery, 0); return `<section class="card"><h2>📷 갤러리</h2><div class="faint">불러오는 중…</div></section>`; }
   if (S.gal.unsupported) return `<section class="card"><h2>📷 갤러리</h2><div class="faint">갤러리는 Apps Script 서버를 새 버전으로 배포하고 <b>authorize</b> 를 한 번 실행하면 켜져요.</div></section>`;
@@ -1070,7 +1076,7 @@ function galleryCard(){
   let groups='', last=null, buf='';
   const flush = () => { if (buf){ groups += `<div class="galgrid">${buf}</div>`; buf=''; } };
   list.forEach(p => { if (p.date!==last){ flush(); last=p.date; groups += `<div class="galdate">${fullDate(p.date)}</div>`; }
-    const th = (p.photos[0]||{}).thumb;
+    const th = (galPhotos(p)[0]||{}).thumb;
     buf += `<button class="galtile" data-gpost="${esc(p.id)}" title="${esc(fullDT(p.createdAt))}">${th?`<img src="data:image/jpeg;base64,${th}" alt="" loading="lazy">`:''}
       <span class="gb">${p.photos.length>1?`<span>📷${p.photos.length}</span>`:''}${p.comments.length?`<span>💬${p.comments.length}</span>`:''}${p.area?`<span class="ar">${esc(p.area)}</span>`:''}</span></button>`; });
   flush();
@@ -1143,16 +1149,20 @@ function galPostSheet(id){
     <div class="gcmeta">${esc(fullDT(c.at))}${c.editedAt?' · 수정됨':''}${rep?'':`<button data-greply="${esc(c.id)}">답글</button>`}<button data-gcedit="${esc(c.id)}">수정</button><button class="del" data-gcdel="${esc(c.id)}">삭제</button></div></div>`;
   const ed = S.galEdit ? p.comments.find(c=>c.id===S.galEdit) : null, rp = S.galReply ? p.comments.find(c=>c.id===S.galReply) : null;
   const createdDay = (()=>{ const d=new Date(p.createdAt); return ymd(d.getFullYear(), d.getMonth()+1, d.getDate()); })();
-  openSheet(`<div class="galview">${p.photos.map(ph=>`<img data-gfull="${esc(ph.id)}" src="${S.galImg[ph.id]||'data:image/jpeg;base64,'+ph.thumb}" alt="">`).join('')}</div>
-    <div class="galmeta">🕒 ${esc(fullDT(p.createdAt))}${p.area?`<span class="chip dom">🌱 ${esc(p.area)}</span>`:''}${p.photos.length>1?`<span class="faint" style="font-weight:400">옆으로 넘겨 ${p.photos.length}장</span>`:''}</div>
+  const phs = galPhotos(p);
+  openSheet(`<div class="galview">${phs.map(ph=>`<img data-gfull="${esc(ph.id)}" src="${S.galImg[ph.id]||'data:image/jpeg;base64,'+ph.thumb}" alt="">`).join('')}</div>
+    <div class="galmeta">🕒 ${esc(fullDT(p.createdAt))}${p.area?`<span class="chip dom">🌱 ${esc(p.area)}</span>`:''}${p.photos.length>1?`<span class="faint" style="font-weight:400">사진 ${p.photos.length}장 · 아래로 넘겨 보기</span>`:''}</div>
     ${p.date!==createdDay?`<div class="faint">📅 ${esc(fullDate(p.date))}의 기록</div>`:''}
     <div style="margin-top:8px">${top.map(c=>cm(c,false)+reps(c).map(r=>cm(r,true)).join('')).join('') || '<div class="faint" style="padding:8px 0">아직 남긴 생각이 없어요</div>'}</div>
     <div class="gcin">${rp?`<div class="faint">↳ 「${esc(String(rp.text).slice(0,24))}」에 답글 <button class="tbtn" data-greply="">취소</button></div>`:''}${ed?`<div class="faint">✏️ 댓글 수정 중 <button class="tbtn" data-gcedit="">취소</button></div>`:''}
       <textarea id="gc-text" placeholder="${rp?'답글 남기기…':'생각·머릿속 남기기…'}">${ed?esc(ed.text):''}</textarea>
       <div class="form-row" style="margin-top:6px"><button class="btn ghost" id="m-cancel" style="flex:none">닫기</button><button class="btn" id="gc-send" data-post="${esc(p.id)}">${ed?'수정 저장':rp?'답글 남기기':'남기기'}</button></div></div>
-    <details style="margin-top:10px"><summary class="faint" style="cursor:pointer">⋯ 게시물 편집 (날짜·영역·사진 빼기·삭제)</summary>
+    <details style="margin-top:10px" ${S.galEditOpen?'open':''}><summary class="faint" style="cursor:pointer">⋯ 게시물 편집 (날짜·영역·사진 순서·빼기·삭제)</summary>
       <div class="form-row"><input id="ge-date" type="date" value="${esc(p.date)}"><select id="ge-area"><option value="">🌱 영역 없음</option>${[...new Set((S.data.seedList||[]).concat(p.area?[p.area]:[]))].map(n=>`<option ${n===p.area?'selected':''}>${esc(n)}</option>`).join('')}</select><button class="btn" id="ge-save" data-post="${esc(p.id)}" style="flex:none">저장</button></div>
-      ${p.photos.length>1?`<div class="gphoto-edit galprev">${p.photos.map(ph=>`<div><img src="data:image/jpeg;base64,${ph.thumb}" alt=""><button data-gpdel="${esc(ph.id)}" aria-label="이 사진 빼기">✕</button></div>`).join('')}</div>`:''}
+      ${phs.length>1?`<div class="faint" style="margin-top:6px">📷 사진 순서 — ⠿ 끌거나 ▲▼ 로 옮기기 (맨 위 사진이 갤러리 대표 사진)</div>
+        <div class="gporder" data-lkind="gphoto">${phs.map((ph,i)=>`<div class="row" data-litem="${esc(ph.id)}"><span class="lgrip" title="끌어서 순서 바꾸기">⠿</span><img src="data:image/jpeg;base64,${ph.thumb}" alt="">
+          <span class="faint" style="flex:1">${i+1}번째${i===0?' · 대표':''}</span><button class="tbtn" data-gpmv="${esc(ph.id)}|-1" ${i===0?'disabled':''} aria-label="위로">▲</button><button class="tbtn" data-gpmv="${esc(ph.id)}|1" ${i===phs.length-1?'disabled':''} aria-label="아래로">▼</button>
+          <button class="tbtn" data-gpdel="${esc(ph.id)}" style="color:var(--up)" aria-label="이 사진 빼기">✕</button></div>`).join('')}</div>`:''}
       <div class="form-row"><button class="btn ghost" id="ge-del" data-post="${esc(p.id)}" style="color:var(--up)">게시물 삭제</button></div></details>`);
   $('#sheet').style.maxHeight='94vh'; $('#sheet').style.overflow='auto';
   // 크게 보기: 줄인 원본을 한 장씩 받아 바꿔 끼운다(한 번 받은 건 기억)
@@ -1584,7 +1594,10 @@ document.addEventListener('click', async e => {
     catch(_){ toast('이 브라우저는 버튼 붙여넣기를 막아요 · Ctrl+V 하거나 사진 고르기를 써 주세요'); } return; }
   if (t.id==='gal-retry'){ S.gal=null; render(); return; }
   if (ds.galf!==undefined){ S.galF=ds.galf; const y=window.scrollY; render(); window.scrollTo(0,y); return; }
-  if (ds.gpost){ S.galReply=null; S.galEdit=null; galPostSheet(ds.gpost); return; }
+  if (ds.gpost){ S.galReply=null; S.galEdit=null; S.galEditOpen=false; galPostSheet(ds.gpost); return; }
+  if (ds.gpmv){ const [pid,dir]=ds.gpmv.split('|'), p=(S.gal.posts||[]).find(x=>x.id===S.galOpen); if (!p) return;
+    const ids=galPhotos(p).map(x=>x.id), i=ids.indexOf(pid), j=i + +dir; if (i<0 || j<0 || j>=ids.length) return;
+    [ids[i],ids[j]]=[ids[j],ids[i]]; galSaveOrder(p.id, ids); S.galEditOpen=true; const sc=$('#sheet').scrollTop; galPostSheet(p.id); $('#sheet').scrollTop=sc; return; }
   if (ds.gprm!==undefined){ S.galPend.splice(+ds.gprm,1); galPrev(); return; }
   if (t.id==='gal-up'){ const ph=S.galPend||[]; if (!ph.length) return toast('사진을 골라 주세요');
     if (t.disabled) return; t.disabled=true;
@@ -1601,7 +1614,7 @@ document.addEventListener('click', async e => {
     const ok = await galCall('uiGalleryComment', [ds.post, v, S.galReply||'', S.galEdit||''], S.galEdit?'수정했어요':'남겼어요');
     t.disabled=false; if (ok){ S.galReply=null; S.galEdit=null; galPostSheet(ds.post); } return; }
   if (t.id==='ge-save'){ if (await galCall('uiGalleryEdit', [ds.post, {date:$('#ge-date').value, area:$('#ge-area').value}], '저장했어요')) galPostSheet(ds.post); return; }
-  if (ds.gpdel){ if (!confirm('이 사진을 뺄까요? (드라이브 휴지통으로 가요)')) return; if (await galCall('uiGalleryDeletePhoto', [ds.gpdel], '뺐어요')) galPostSheet(S.galOpen); return; }
+  if (ds.gpdel){ if (!confirm('이 사진을 뺄까요? (드라이브 휴지통으로 가요)')) return; S.galEditOpen=true; if (await galCall('uiGalleryDeletePhoto', [ds.gpdel], '뺐어요')) galPostSheet(S.galOpen); return; }
   if (t.id==='ge-del'){ if (!confirm('이 게시물을 지울까요? 사진은 드라이브 휴지통으로 가요(30일 안에 되살릴 수 있어요).')) return; closeSheet(); await galCall('uiGalleryDelete', [ds.post], '지웠어요'); render(); return; }
   if (ds.ctag){ e.preventDefault(); S.ckTag = S.ckTag===ds.ctag ? null : ds.ctag; S.checkOpen=true; const y=window.scrollY; render(); window.scrollTo(0,y); return; }
   if (ds.tpk){ const a=S.sheetTags=S.sheetTags||[], i=a.indexOf(ds.tpk); if (i>=0) a.splice(i,1); else if (a.length>=3) return toast('태그는 3개까지 달 수 있어요'); else a.push(ds.tpk); renderTagPick(); return; }
