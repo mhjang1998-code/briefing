@@ -42,13 +42,18 @@ const SCHEMA = {
     ['d1', '전일비'], ['d5', '5일'], ['comment', '코멘트'], ['updatedAt', '갱신시각']] },
   seeds: { sheet: '씨앗', key: 'id', bools: [], cols: [
     ['id', 'id'], ['date', '날짜'], ['name', '영역'], ['count', '개수'], ['updatedAt', '수정시각']] },
+  // 📷 갤러리: 게시물(날짜·영역·댓글 JSON) + 사진(드라이브 파일 id·작은 미리보기). 사용자 전용(루틴 pull 에 안 나감)
+  gallery: { sheet: '갤러리', key: 'id', bools: [], cols: [
+    ['id', 'id'], ['date', '날짜'], ['area', '영역'], ['comments', '댓글'], ['createdAt', '작성시각'], ['updatedAt', '수정시각']] },
+  gphotos: { sheet: '갤러리사진', key: 'id', bools: [], cols: [
+    ['id', 'id'], ['postId', '게시물id'], ['fileId', '파일id'], ['order', '순서'], ['thumb', '미리보기'], ['createdAt', '작성시각']] },
   settings: { sheet: '설정', key: 'key', bools: [], cols: [['key', '키'], ['value', '값']] },
 };
 
 const CATEGORIES = ['일정', '할 일', '분석', '결정', '생각', '기타'];
 const DEFAULT_DOMAINS = ['금융', '부동산', '인사이트', '전공', '사업', '기타'];
 const TABS = ['today', 'memo', 'plan', 'history', 'watch', 'manage'];
-const SCHEMA_VERSION = 'v9';
+const SCHEMA_VERSION = 'v10';
 const CAL_PAST = 35, CAL_FUTURE = 120;   // 구글 캘린더와 맞추는 기간(일)
 const DEFAULT_SEEDS = ['전공', '영어', '금융', '부동산', '연애', '통제'];
 const SEED_MAX = 3;
@@ -79,7 +84,7 @@ function ensureSetup_() {
   if (ss_().getSheetByName('설정') && PropertiesService.getScriptProperties().getProperty('API_KEY')) {
     const cache = CacheService.getScriptCache();
     if (cache.get('schema') === SCHEMA_VERSION) return;
-    ensureSheet_('items'); ensureSheet_('seeds'); ensureColumns_('watchlist'); ensureColumns_('memos'); ensureColumns_('briefs'); ensureColumns_('items'); ensureColumns_('schedules');
+    ensureSheet_('items'); ensureSheet_('seeds'); ensureSheet_('gallery'); ensureSheet_('gphotos'); ensureColumns_('watchlist'); ensureColumns_('memos'); ensureColumns_('briefs'); ensureColumns_('items'); ensureColumns_('schedules');
     migrateStudy_();
     cache.put('schema', SCHEMA_VERSION, 21600);
     return;
@@ -624,7 +629,8 @@ function importData_(d) {
 /* ───────────── 앱 화면용 함수 (google.script.run 또는 외부 앱의 POST action:"ui") ───────────── */
 
 const UI_FUNCS = { uiSaveUiSetting, uiRunBrief, uiSetRoutineToken, uiSetPin, uiSetSeed, uiSaveSeedList, uiRenameSeed, uiLoad, uiAddMemo, uiEditMemo, uiDeleteMemo, uiTogglePin, uiAddComment, uiDeleteComment,
-  uiSetSeen, uiSetDomain, uiSaveDomains, uiSetEntry, uiSetEntries, uiDeleteItem, uiSaveTabs, uiSaveFolders, uiRenameFolder, uiDeleteFolder, uiSaveSchedule, uiSetDone, uiDelete, uiAddTodo, uiSaveWatchlist, uiSearch, uiQuotes };
+  uiSetSeen, uiSetDomain, uiSaveDomains, uiSetEntry, uiSetEntries, uiDeleteItem, uiSaveTabs, uiSaveFolders, uiRenameFolder, uiDeleteFolder, uiSaveSchedule, uiSetDone, uiDelete, uiAddTodo, uiSaveWatchlist, uiSearch, uiQuotes,
+  uiGallery, uiGalleryAdd, uiGalleryPhoto, uiGalleryImage, uiGalleryEdit, uiGalleryComment, uiGalleryDelComment, uiGalleryDeletePhoto, uiGalleryDelete };
 
 function uiDispatch_(body) {
   const fn = UI_FUNCS[body.fn];
@@ -816,7 +822,7 @@ function uiLoad(key) {
     .sort((a, b) => String(b.date).localeCompare(String(a.date)) || String(a.createdAt).localeCompare(String(b.createdAt)))
     .slice(0, 800);
   return { today: today_(), sections: SECTIONS, categories: CATEGORIES, domains: domains_(), tabs: tabs_(), folders: folders_(),
-    briefs, memos, items, schedules, todos, calError, uiset: uiSettings_(), scriptId: ScriptApp.getScriptId(), seeds: seeds_(), seedList: seedList_(), seedMax: SEED_MAX,
+    briefs, memos, items, schedules, todos, calError, uiset: uiSettings_(), galleryDates: galleryDates_(), scriptId: ScriptApp.getScriptId(), seeds: seeds_(), seedList: seedList_(), seedMax: SEED_MAX,
     watchlist: { items: watchlist_(), prompt: getSetting_('지표공통프롬프트') } };
 }
 
@@ -1140,9 +1146,111 @@ function uiQuotes(key, symbols) {
   return Object.assign(out, tv);
 }
 
+/* ───────────── 📷 갤러리 (사진은 내 구글 드라이브 「아침 브리핑 갤러리」 폴더, 비공개) ───────────── */
+function galleryFolder_() {
+  const props = PropertiesService.getScriptProperties(), id = props.getProperty('GALLERY_FOLDER');
+  if (id) { try { const f = DriveApp.getFolderById(id); if (!f.isTrashed()) return f; } catch (e) {} }
+  const f = DriveApp.createFolder('아침 브리핑 갤러리');
+  props.setProperty('GALLERY_FOLDER', f.getId());
+  return f;
+}
+function galleryDates_() {
+  try { const o = {}; readAll_('gallery').forEach(p => { o[p.date] = (o[p.date] || 0) + 1; }); return o; } catch (e) { return {}; }
+}
+function gComments_(p) { try { const a = JSON.parse(p.comments || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } }
+function gPost_(id) { const p = findBy_('gallery', 'id', id); if (!p) throw new Error('게시물을 찾지 못했어요.'); return p; }
+function gSaveComments_(p, list) {
+  const v = JSON.stringify(list);
+  if (v.length > 45000) throw new Error('댓글이 너무 많아요. 새 게시물로 이어 써 주세요.');
+  patchRow_('gallery', p._row, { comments: v, updatedAt: nowIso_() });
+}
+/** 갤러리 전체(미리보기 포함). 앱이 일정 탭을 열 때만 부른다 */
+function uiGallery(key) {
+  checkKey_(key);
+  const ph = {};
+  readAll_('gphotos').forEach(x => { (ph[x.postId] = ph[x.postId] || []).push({ id: x.id, order: +x.order || 0, thumb: String(x.thumb || '') }); });
+  const posts = readAll_('gallery').map(p => ({ id: p.id, date: p.date, area: p.area, createdAt: p.createdAt, updatedAt: p.updatedAt,
+    comments: gComments_(p), photos: (ph[p.id] || []).sort((a, b) => a.order - b.order) }))
+    .sort((a, b) => String(b.date).localeCompare(String(a.date)) || String(b.createdAt).localeCompare(String(a.createdAt)));
+  return { posts, galleryDates: galleryDates_() };
+}
+/** 새 게시물: {date, area, text} → text 는 첫 댓글. 사진은 uiGalleryPhoto 로 한 장씩 */
+function uiGalleryAdd(key, post) {
+  checkKey_(key);
+  post = post || {};
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(String(post.date || '')) ? post.date : today_(), now = nowIso_(), id = newId_('g');
+  const text = String(post.text || '').trim();
+  const comments = text ? [{ id: newId_('gc'), parent: '', text: text.slice(0, 5000), at: now }] : [];
+  withLock_(() => append_('gallery', [{ id, date, area: String(post.area || '').slice(0, 30), comments: JSON.stringify(comments), createdAt: now, updatedAt: now }]));
+  return { id };
+}
+function uiGalleryPhoto(key, postId, data, thumb, order) {
+  checkKey_(key);
+  data = String(data || ''); thumb = String(thumb || '');
+  if (!data || data.length > 12000000) throw new Error('사진이 너무 커요.');
+  if (thumb.length > 45000) throw new Error('미리보기가 너무 커요.');
+  const p = gPost_(postId);
+  const blob = Utilities.newBlob(Utilities.base64Decode(data), 'image/jpeg', p.date + '_' + postId + '_' + (order || 0) + '.jpg');
+  const file = galleryFolder_().createFile(blob);
+  withLock_(() => append_('gphotos', [{ id: newId_('gp'), postId, fileId: file.getId(), order: +order || 0, thumb, createdAt: nowIso_() }]));
+  return { ok: true };
+}
+/** 크게 보기: 원본(줄인 사진)을 base64 로. 갤러리에 등록된 사진만 */
+function uiGalleryImage(key, photoId) {
+  checkKey_(key);
+  const x = findBy_('gphotos', 'id', photoId);
+  if (!x) throw new Error('사진을 찾지 못했어요.');
+  return { data: Utilities.base64Encode(DriveApp.getFileById(x.fileId).getBlob().getBytes()) };
+}
+function uiGalleryEdit(key, postId, patch) {
+  checkKey_(key);
+  patch = patch || {};
+  const q = { updatedAt: nowIso_() };
+  if (/^\d{4}-\d{2}-\d{2}$/.test(String(patch.date || ''))) q.date = patch.date;
+  if ('area' in patch) q.area = String(patch.area || '').slice(0, 30);
+  withLock_(() => patchRow_('gallery', gPost_(postId)._row, q));
+  return uiGallery(key);
+}
+/** 댓글·대댓글: parent 가 있으면 그 댓글의 답글. 저장 시각은 서버가 자동으로 */
+function uiGalleryComment(key, postId, text, parent, editId) {
+  checkKey_(key);
+  text = String(text || '').trim();
+  if (!text) throw new Error('내용을 적어 주세요.');
+  withLock_(() => {
+    const p = gPost_(postId), list = gComments_(p);
+    if (editId) { const c = list.find(x => x.id === editId); if (c) { c.text = text.slice(0, 5000); c.editedAt = nowIso_(); } }
+    else list.push({ id: newId_('gc'), parent: parent && list.some(x => x.id === parent) ? parent : '', text: text.slice(0, 5000), at: nowIso_() });
+    gSaveComments_(p, list);
+  });
+  return uiGallery(key);
+}
+function uiGalleryDelComment(key, postId, cid) {
+  checkKey_(key);
+  withLock_(() => { const p = gPost_(postId); gSaveComments_(p, gComments_(p).filter(x => x.id !== cid && x.parent !== cid)); });
+  return uiGallery(key);
+}
+function uiGalleryDeletePhoto(key, photoId) {
+  checkKey_(key);
+  withLock_(() => {
+    const x = findBy_('gphotos', 'id', photoId);
+    if (x) { try { DriveApp.getFileById(x.fileId).setTrashed(true); } catch (e) {} deleteBy_('gphotos', 'id', photoId); }
+  });
+  return uiGallery(key);
+}
+/** 게시물 삭제: 사진 파일은 드라이브 휴지통으로(30일 안에 되살릴 수 있음) */
+function uiGalleryDelete(key, postId) {
+  checkKey_(key);
+  withLock_(() => {
+    readAll_('gphotos').filter(x => x.postId === postId).forEach(x => { try { DriveApp.getFileById(x.fileId).setTrashed(true); } catch (e) {} });
+    deleteBy_('gphotos', 'postId', postId); deleteBy_('gallery', 'id', postId);
+  });
+  return uiGallery(key);
+}
+
 /** 편집기에서 한 번 실행해 "외부 사이트 접속" 권한을 승인하는 용도 (종목 검색·시세에 필요) */
 function authorize() {
   Logger.log('구글 캘린더: ' + CalendarApp.getDefaultCalendar().getName() + ' 연결 확인');
+  Logger.log('구글 드라이브(갤러리 사진 저장): ' + DriveApp.getRootFolder().getName() + ' 연결 확인');
   const code = UrlFetchApp.fetch('https://ac.stock.naver.com/ac?target=stock&q=' + encodeURIComponent('한미'),
     { muteHttpExceptions: true }).getResponseCode();
   Logger.log('권한 승인 완료 (응답 ' + code + '). 이제 앱에서 종목 검색·시세·구글 캘린더를 쓸 수 있습니다.');
