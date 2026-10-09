@@ -215,6 +215,12 @@ nav .nb{position:absolute;top:0;left:50%;margin-left:6px;background:var(--up);co
 .gcm .gcmeta button{border:0;background:none;color:var(--accent);font-size:12px;padding:0;cursor:pointer} .gcm .gcmeta button.del{color:var(--up)}
 .gcin{position:sticky;bottom:0;background:var(--card);padding-top:6px} .gcin textarea{min-height:52px}
 .gphoto-edit{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0}
+/* 🔥 나의 다짐 (브리핑 탭 맨 위 고정) */
+.card.vow{--k:#e11d48;background:color-mix(in srgb,var(--k) 7%,var(--card));border:1px solid color-mix(in srgb,var(--k) 30%,var(--line));border-left:4px solid var(--k);padding:10px 14px}
+.vow .vh{display:flex;align-items:center;gap:6px;font-weight:800;font-size:13px;color:color-mix(in srgb,var(--k) 75%,var(--ink));margin-bottom:4px}
+.vow ol{margin:0;padding-left:22px} .vow li{font-size:16px;font-weight:700;line-height:1.55;padding:2px 0}
+.vow li::marker{color:var(--k);font-weight:900}
+.vow input{margin:4px 0}
 .tpick{display:flex;gap:4px;flex:0 0 auto} .tpick select{width:auto;padding-left:8px;padding-right:8px}
 .tagsel{appearance:none;-webkit-appearance:none;padding:1px 9px;cursor:pointer}
 .fchips{display:flex;gap:6px;overflow-x:auto;padding:2px 0 8px;scrollbar-width:none} .fchips::-webkit-scrollbar{display:none}
@@ -975,9 +981,17 @@ function briefBlock(){
   return html;
 }
 // 브리핑 탭 카드 순서: 각 카드 ✏️ 편집 → ⠿ 로 끌기 (체크리스트 설정 cards 에 저장 → 폰·PC 같음)
+function vowCard(){
+  const v=((layout().vows)||[]).concat(['','','']).slice(0,3), has=v.some(x=>String(x).trim());
+  if (S.vowEdit) return `<section class="card vow"><div class="vh">🔥 나의 다짐 <span class="sp" style="flex:1"></span></div>
+    ${v.map((x,i)=>`<input data-vow="${i}" value="${esc(x)}" maxlength="80" placeholder="다짐 ${i+1}">`).join('')}
+    <div class="form-row" style="margin-top:6px"><button class="btn ghost" id="vow-cancel">취소</button><button class="btn" id="vow-save">저장</button></div></section>`;
+  return `<section class="card vow"><div class="vh">🔥 나의 다짐<span class="sp" style="flex:1"></span><button class="tbtn edbtn" id="vow-edit" title="다짐 고치기">✏️</button></div>
+    ${has ? `<ol>${v.filter(x=>String(x).trim()).map(x=>`<li>${esc(x)}</li>`).join('')}</ol>` : `<div class="faint">✏️ 를 눌러 매일 볼 다짐 3가지를 적어 두세요</div>`}</section>`;
+}
 function viewToday(){
   const parts = { check: checklistCard, ind: indicatorsCard, seed: () => seedCard('today'), track: trackCard, brief: briefBlock };
-  return `<div data-lkind="cards">${cardOrder().map(k => { const h=parts[k](); return h ? `<div class="tcard" data-litem="${k}">${h}</div>` : ''; }).join('')}</div>`;
+  return vowCard() + `<div data-lkind="cards">${cardOrder().map(k => { const h=parts[k](); return h ? `<div class="tcard" data-litem="${k}">${h}</div>` : ''; }).join('')}</div>`;
 }
 function schedRow(s, showDate, grip){
   const [t,c] = dday(s.date);
@@ -1586,6 +1600,9 @@ document.addEventListener('click', async e => {
     if(!confirm(isLate ? `「${bb?bb.name:''}」 칸을 지울까요? 지난 일정은 원래 칸(없으면 첫 칸)에 「N일 지남」으로 보여요. 편집에서 다시 켤 수 있어요.` : `「${bb?bb.name:''}」 칸을 지울까요? 안의 항목은 다른 칸으로 자동 배치돼요.`)) return;
     if (isLate) L.lateOff=true; L.buckets=L.buckets.filter(x=>x.id!==ds.bdel); delete L.items[ds.bdel]; saveLayout(L); render(); return; }
   if (t.id==='late-on'){ const L=layout(); L.lateOff=false; if (!L.buckets.some(b=>b.id==='late')) L.buckets.unshift({id:'late', name:LATE_NAME}); saveLayout(L); render(); return; }
+  if (t.id==='vow-edit'){ S.vowEdit=true; render(); setTimeout(()=>{ const i=document.querySelector('[data-vow="0"]'); if(i) i.focus(); },30); return; }
+  if (t.id==='vow-cancel'){ S.vowEdit=false; render(); return; }
+  if (t.id==='vow-save'){ const L=layout(); L.vows=[...document.querySelectorAll('[data-vow]')].map(i=>i.value.trim()); S.vowEdit=false; keepLayout(L); render(); await saveLayout(L); toast('🔥 다짐 저장됨'); return; }
   if (t.id==='gal-new'){ galNewSheet(); return; }
   if (t.id==='gal-paste'){ try { if (!navigator.clipboard || !navigator.clipboard.read) throw new Error('x');
       const items = await navigator.clipboard.read(), fs=[];
