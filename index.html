@@ -1086,11 +1086,47 @@ function shrinkImg(file, max, q){
     img.onerror = () => { URL.revokeObjectURL(u); rej(new Error('이 사진 형식은 읽지 못했어요 (JPG·PNG로 올려 주세요)')); };
     img.src = u; });
 }
+async function addGalFiles(files){
+  files = files.filter(f => /^image\//.test(f.type||'') || /\.(jpe?g|png|gif|webp|heic|bmp)$/i.test(f.name||''));
+  if (!files.length) return toast('사진 파일이 아니에요');
+  S.galPend = S.galPend || [];
+  if (S.galPend.length + files.length > 5) toast('사진은 5장까지예요 · 앞의 것만 넣었어요');
+  for (const f of files.slice(0, Math.max(0, 5 - S.galPend.length))){
+    try { let thumb=await shrinkImg(f, 360, 0.7); if (thumb.length>44000) thumb=await shrinkImg(f, 260, 0.55);
+      S.galPend.push({ data: await shrinkImg(f, 1600, 0.82), thumb }); galPrev(); }
+    catch(err){ toast(err.message); } }
+}
+// 📋 붙여넣기(Ctrl+V)·끌어다 놓기: 올리기 창이 열려 있으면 거기에, 일정 탭이면 올리기 창을 열고 넣는다
+const galSheetOpen = () => $('#sheetBg').classList.contains('show') && !!$('#gal-files');
+const clipImgs = dt => [...((dt && dt.items) || [])].filter(i => i.kind==='file' && /^image\//.test(i.type)).map(i => i.getAsFile()).filter(Boolean);
+document.addEventListener('paste', e => {
+  const imgs = clipImgs(e.clipboardData); if (!imgs.length) return;
+  const open = $('#sheetBg').classList.contains('show');
+  if (open && $('#gc-text') && S.galOpen){ e.preventDefault(); galAddToPost(S.galOpen, imgs); return; }   // 열린 게시물에 붙여넣으면 그 게시물에 사진 추가
+  if (open && !$('#gal-files')) return;              // 다른 창(메모 등)에 붙여넣는 중이면 건드리지 않음
+  if (!open){ if (S.tab!=='plan' || !S.gal || !S.gal.posts) return; galNewSheet(); }
+  e.preventDefault(); addGalFiles(imgs);
+});
+document.addEventListener('dragover', e => { if (galSheetOpen() && [...(e.dataTransfer.types||[])].includes('Files')) e.preventDefault(); });
+document.addEventListener('drop', e => { if (!galSheetOpen()) return; const fs=[...(e.dataTransfer.files||[])]; if (!fs.length) return; e.preventDefault(); addGalFiles(fs); });
+async function galAddToPost(id, files){
+  const p=(S.gal.posts||[]).find(x=>x.id===id); if (!p) return;
+  const room = 5 - p.photos.length; if (room<=0) return toast('이 게시물은 사진이 5장이라 더 못 넣어요');
+  if (!confirm(`이 게시물에 사진 ${Math.min(room, files.length)}장을 추가할까요?`)) return;
+  toast('사진 올리는 중…');
+  try { let order = Math.max(-1, ...p.photos.map(x=>x.order||0)) + 1;
+    for (const f of files.slice(0, room)){ let thumb=await shrinkImg(f, 360, 0.7); if (thumb.length>44000) thumb=await shrinkImg(f, 260, 0.55);
+      await callOnce('uiGalleryPhoto', [id, await shrinkImg(f, 1600, 0.82), thumb, order++]); }
+    await loadGallery(); toast('📷 추가했어요'); if (galSheetOpenPost(id)) galPostSheet(id); }
+  catch(err){ toast('추가 실패: '+(err.message||'')); await loadGallery(); }
+}
+const galSheetOpenPost = id => $('#sheetBg').classList.contains('show') && S.galOpen===id && !!$('#gc-text');
 function galPrev(){ const b=$('#gal-prev'); if (b) b.innerHTML = (S.galPend||[]).map((x,i)=>`<div><img src="data:image/jpeg;base64,${x.thumb}" alt=""><button data-gprm="${i}" aria-label="빼기">✕</button></div>`).join(''); }
 function galNewSheet(){
   S.galPend=[];
   openSheet(`<h3>📷 사진 올리기</h3>
-    <label class="btn ghost" for="gal-files" style="display:block;text-align:center;cursor:pointer">📁 사진 고르기 (최대 5장)</label><input id="gal-files" type="file" accept="image/*" multiple style="display:none">
+    <div class="form-row" style="margin:0"><label class="btn ghost" for="gal-files" style="text-align:center;cursor:pointer">📁 사진 고르기</label><button class="btn ghost" id="gal-paste" style="flex:none">📋 붙여넣기</button></div><input id="gal-files" type="file" accept="image/*" multiple style="display:none">
+    <div class="faint" style="margin-top:4px">최대 5장 · PC는 <b>Ctrl+V</b> 또는 사진을 이 창에 끌어다 놓아도 돼요</div>
     <div id="gal-prev" class="galprev"></div>
     <div class="form-row"><input id="gal-date" type="date" value="${esc(S.planSeg==='calendar'&&S.selDay?S.selDay:S.data.today)}">
       <select id="gal-area"><option value="">🌱 영역 없음</option>${(S.data.seedList||[]).map(n=>`<option>${esc(n)}</option>`).join('')}</select></div>
@@ -1541,6 +1577,11 @@ document.addEventListener('click', async e => {
     if (isLate) L.lateOff=true; L.buckets=L.buckets.filter(x=>x.id!==ds.bdel); delete L.items[ds.bdel]; saveLayout(L); render(); return; }
   if (t.id==='late-on'){ const L=layout(); L.lateOff=false; if (!L.buckets.some(b=>b.id==='late')) L.buckets.unshift({id:'late', name:LATE_NAME}); saveLayout(L); render(); return; }
   if (t.id==='gal-new'){ galNewSheet(); return; }
+  if (t.id==='gal-paste'){ try { if (!navigator.clipboard || !navigator.clipboard.read) throw new Error('x');
+      const items = await navigator.clipboard.read(), fs=[];
+      for (const it of items){ const ty = it.types.find(x=>/^image\//.test(x)); if (ty){ const bl=await it.getType(ty); fs.push(new File([bl], 'paste.'+ty.split('/')[1], {type:ty})); } }
+      if (!fs.length) return toast('복사된 사진이 없어요'); addGalFiles(fs); }
+    catch(_){ toast('이 브라우저는 버튼 붙여넣기를 막아요 · Ctrl+V 하거나 사진 고르기를 써 주세요'); } return; }
   if (t.id==='gal-retry'){ S.gal=null; render(); return; }
   if (ds.galf!==undefined){ S.galF=ds.galf; const y=window.scrollY; render(); window.scrollTo(0,y); return; }
   if (ds.gpost){ S.galReply=null; S.galEdit=null; galPostSheet(ds.gpost); return; }
@@ -1784,13 +1825,7 @@ document.addEventListener('click', async e => {
   if (t.id==='wl-save'){ const p=$('#wl-prompt').value; const d=await act('uiSaveWatchlist', wlItems(), p); S.wl=null; S.wlDirty=false; S.wlPromptDraft=null; render(); return; }
 });
 document.addEventListener('change', async e => {
-  if (e.target.id==='gal-files'){ const files=[...e.target.files]; e.target.value=''; S.galPend=S.galPend||[];
-    if (S.galPend.length + files.length > 5) toast('사진은 5장까지예요 · 앞의 것만 넣었어요');
-    for (const f of files.slice(0, 5 - S.galPend.length)){
-      try { let thumb=await shrinkImg(f, 360, 0.7); if (thumb.length>44000) thumb=await shrinkImg(f, 260, 0.55);
-        S.galPend.push({ data: await shrinkImg(f, 1600, 0.82), thumb }); galPrev(); }
-      catch(err){ toast(err.message); } }
-    return; }
+  if (e.target.id==='gal-files'){ const files=[...e.target.files]; e.target.value=''; addGalFiles(files); return; }
   const t=e.target, ds=t.dataset;
   if (ds.wlOn!==undefined){ wlItems()[+ds.wlOn].enabled = t.checked; wlChanged(); }
   if (t.id==='wl-cat'){ S.cat=t.value; render(); }
