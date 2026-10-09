@@ -301,6 +301,13 @@ details:not([open])>summary .chev,.bar.folded .chev{transform:rotate(-90deg)}
 .seedcard summary{cursor:pointer;font-weight:700;color:var(--sub);font-size:13px;list-style:none}
 .seedcard summary::-webkit-details-marker{display:none}
 .seedcard[open] summary{margin-bottom:8px}
+.stbl{width:100%;border-collapse:collapse;margin:4px 0 10px;font-size:13px;font-variant-numeric:tabular-nums}
+.stbl th{font-size:11px;font-weight:600;color:var(--faint);padding:4px 2px;text-align:center;white-space:nowrap}
+.stbl th:first-child,.stbl td:first-child{text-align:left}
+.stbl td{padding:6px 2px;border-top:1px solid var(--line);text-align:center;white-space:nowrap}
+.stbl td:first-child{font-weight:700} .stbl td:first-child i{display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:5px;vertical-align:0}
+.stbl .pv{color:var(--faint)} .stbl .cv{font-weight:800;color:var(--ink)} .stbl .dl{display:block;font-size:10.5px;font-weight:700}
+.stbl .dl.up{color:var(--seed)} .stbl .dl.down{color:var(--up)} .stbl .dl.eq{color:var(--faint)}
 .sstats{display:flex;gap:8px;margin:4px 0 8px}
 .sstats div{flex:1;background:var(--chip);border-radius:10px;padding:6px 8px;text-align:center}
 .sstats b{display:block;font-size:18px;color:var(--ink)} .sstats span{font-size:11px;color:var(--faint)}
@@ -752,10 +759,19 @@ function seedSeries(mode){
 }
 function seedCard(where){
   if (!S.data.seedList) return `<div class="card faint">🌱 씨앗 기능은 Apps Script 서버를 새 버전으로 배포하면 켜져요.</div>`;
-  const d=S.data, mode=S.seedMode||'week', view=S.seedView||'total', kind=S.seedKind||'cum', today=d.today;
+  const d=S.data, mode=S.seedMode||'week', view=S.seedView||'area', kind=S.seedKind||'cum', today=d.today;
   const all=d.seeds||[], sum=f=>all.filter(f).reduce((a,x)=>a+(+x.count||0),0);
   const wk=weekStart(today), mon=today.slice(0,7);
-  const stats=`<div class="sstats"><div><b>${seedDaySum(today)}</b><span>오늘</span></div><div><b>${sum(x=>x.date>=wk&&x.date<=today)}</b><span>이번 주</span></div><div><b>${sum(x=>x.date.slice(0,7)===mon)}</b><span>이번 달</span></div><div><b>${sum(()=>true)}</b><span>전체</span></div></div>`;
+  // 영역별 비교표: 어제/오늘 · 지난주/이번주 · 지난달/이번달 · 전체 (합산하지 않고 영역마다)
+  const pd=addDays(today,-1), pwk=addDays(wk,-7), pwkEnd=addDays(wk,-1), pm=(()=>{ const [yy,mm]=today.split('-').map(Number); return mm===1?`${yy-1}-12`:`${yy}-${String(mm-1).padStart(2,'0')}`; })();
+  const sn=(n,f)=>all.filter(x=>x.name===n && f(x)).reduce((a,x)=>a+(+x.count||0),0);
+  const cmp=(a,b)=>{ const dd=b-a; return `<span class="pv">${a}</span> → <span class="cv">${b}</span><span class="dl ${dd>0?'up':dd<0?'down':'eq'}">${dd>0?'▲'+dd:dd<0?'▼'+(-dd):'―'}</span>`; };
+  const stats=`<table class="stbl"><thead><tr><th>영역</th><th>어제→오늘</th><th>지난주→이번주</th><th>지난달→이번달</th><th>전체</th></tr></thead><tbody>
+    ${(d.seedList||[]).map(n=>`<tr><td><i style="background:${seedColor(n)}"></i>${esc(n)}</td>
+      <td>${cmp(sn(n,x=>x.date===pd), sn(n,x=>x.date===today))}</td>
+      <td>${cmp(sn(n,x=>x.date>=pwk&&x.date<=pwkEnd), sn(n,x=>x.date>=wk&&x.date<=today))}</td>
+      <td>${cmp(sn(n,x=>x.date.slice(0,7)===pm), sn(n,x=>x.date.slice(0,7)===mon))}</td>
+      <td class="cv">${sn(n,()=>true)}</td></tr>`).join('')}</tbody></table>`;
   const ctrls=`<div class="segs"><div class="seg"><button data-smode="week" class="${mode==='week'?'on':''}">주간</button><button data-smode="month" class="${mode==='month'?'on':''}">월간</button></div>
     <div class="seg"><button data-skind="cum" class="${kind==='cum'?'on':''}">누적</button><button data-skind="bar" class="${kind==='bar'?'on':''}">기간별</button></div>
     <div class="seg"><button data-sview="total" class="${view==='total'?'on':''}">합계</button><button data-sview="area" class="${view==='area'?'on':''}">영역별</button></div></div>`;
@@ -768,7 +784,7 @@ function seedCard(where){
 function drawSeedCharts(){
   document.querySelectorAll('[data-schart]').forEach(box=>{
     const W=box.clientWidth||320, H=box.clientHeight||210, P={l:34,r:12,t:12,b:24};
-    const s=seedSeries(S.seedMode||'week'), view=S.seedView||'total', off=S.seedOff||{}, bar=(S.seedKind||'cum')==='bar';
+    const s=seedSeries(S.seedMode||'week'), view=S.seedView||'area', off=S.seedOff||{}, bar=(S.seedKind||'cum')==='bar';
     const lines = bar
       ? (view==='total' ? [{name:'합계',col:'var(--seed)',vals:s.tot}] : s.names.filter(n=>!off[n]).map(n=>({name:n,col:seedColor(n),vals:s.per.map(p=>p[n]||0)})))
       : (view==='total' ? [{name:'합계',col:'var(--seed)',vals:s.cumTot}] : s.names.filter(n=>!off[n]).map(n=>({name:n,col:seedColor(n),vals:s.cumPer[n]})));
