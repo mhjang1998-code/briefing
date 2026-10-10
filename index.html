@@ -225,6 +225,12 @@ nav .nb{position:absolute;top:0;left:50%;margin-left:6px;background:var(--up);co
 .vow input{margin:4px 0}
 .cpick{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:2px 0 8px;padding:6px 8px;border:1px dashed var(--line);border-radius:10px;font-size:12px;color:var(--sub)}
 .cpick .swatches{gap:5px} .cpick .swatches button{width:20px;height:20px}
+.cprev{--pc:#0a6cff;height:56px;border-radius:12px;background:var(--pc);display:flex;align-items:flex-end;justify-content:flex-end;padding:6px 10px;color:#fff;font-weight:800;font-size:12px;text-shadow:0 1px 2px rgba(0,0,0,.5);margin-bottom:10px;border:1px solid var(--line)}
+.cpl{display:block;font-size:12px;font-weight:700;color:var(--sub);margin:6px 0}
+.cpl input[type=range]{display:block;width:100%;-webkit-appearance:none;appearance:none;height:16px;border-radius:99px;margin-top:4px;border:1px solid var(--line);padding:0}
+.cpl input.cph{background:linear-gradient(90deg,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)}
+.cpl input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:24px;height:24px;border-radius:50%;background:#fff;border:3px solid #333;box-shadow:0 1px 4px rgba(0,0,0,.4)}
+.cpl input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;background:#fff;border:3px solid #333}
 .tpick{display:flex;gap:4px;flex:0 0 auto} .tpick select{width:auto;padding-left:8px;padding-right:8px}
 .tagsel{appearance:none;-webkit-appearance:none;padding:1px 9px;cursor:pointer}
 .fchips{display:flex;gap:6px;overflow-x:auto;padding:2px 0 8px;scrollbar-width:none} .fchips::-webkit-scrollbar{display:none}
@@ -280,7 +286,7 @@ nav .nb{position:absolute;top:0;left:50%;margin-left:6px;background:var(--up);co
 .emenu{display:flex;flex-direction:column;gap:6px} .emenu button{display:flex;align-items:center;gap:10px;text-align:left;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:12px;padding:11px 12px;font-size:15px;font-weight:700;cursor:pointer}
 .emenu button small{display:block;font-size:12px;font-weight:400;color:var(--faint)} .emenu button:hover{background:var(--chip)}
 .csrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 0;border-top:1px solid var(--line)} .csrow b{min-width:120px;font-size:13px}
-.csrow .swatches{gap:5px} .csrow .swatches button{width:22px;height:22px}
+.csrow .swatches{gap:4px;max-width:100%} .csrow .swatches button{width:20px;height:20px}
 .bucket .bh{display:flex;align-items:center;gap:6px;font-weight:800;font-size:14px;color:color-mix(in srgb,var(--bk) 70%,var(--ink));margin-bottom:2px}
 .bucket .bh .count{background:var(--chip);border-radius:99px;padding:0 7px;font-size:11px;color:var(--sub);font-weight:600}
 .bucket .bh .sp{flex:1} .bucket .bh{white-space:nowrap} .bucket .bh .tbtn{padding:2px 8px}
@@ -981,7 +987,8 @@ function checklistCard(){
     : (c>a) ? ['q3','🟠 덜 중요한데 급한 일(③)이 많아요 — 한 번에 몰아서 짧게 끝내세요']
     : (d4>=4) ? ['q4','🟣 안 급하고 덜 중요한 일(④)이 쌓였어요 — 안 할 건 지워 주세요']
     : tot ? ['q2','👍 균형 좋아요 — 오늘은 중요한 일(②)에 시간을 써 보세요'] : null;
-  const balance = tot ? `<div class="qbar">${['q1','q2','q3','q4'].map((id,i)=>[a,b2,c,d4][i]?`<span style="flex:${[a,b2,c,d4][i]};background:${bucketColor(id)}" title="${esc(qb(id).name)} ${[a,b2,c,d4][i]}"></span>`:'').join('')}</div>` : '';
+  const lateN = late.length, lbN = lb ? lb.name : '지난 일정';
+  const balance = (tot||lateN) ? `<div class="qbar">${lateN?`<span style="flex:${lateN};background:${bucketColor('late')}" title="${esc(lbN)} ${lateN}"></span>`:''}${['q1','q2','q3','q4'].map((id,i)=>[a,b2,c,d4][i]?`<span style="flex:${[a,b2,c,d4][i]};background:${bucketColor(id)}" title="${esc(qb(id).name)} ${[a,b2,c,d4][i]}"></span>`:'').join('')}</div>` : '';
   const advHtml = adv ? `<div class="qadv" style="--ac:${bucketColor(adv[0])}">${adv[1]}</div>` : '';
   // 맨 위 요약: 칸별 개수 + 마감 D-3·D-7·D-14 (누적, 날짜 있는 것만)
   const counts = L.buckets.map((b,i) => `<span class="ckc" title="${esc(b.name)}" style="background:color-mix(in srgb,${bucketColor(b.id,i)} 16%,var(--chip));color:color-mix(in srgb,${bucketColor(b.id,i)} 80%,var(--ink))">${bIcon(b.name)} ${b.id==='late'?late.length:out.find(x=>x.b.id===b.id).list.length}</span>`).join('');
@@ -1038,8 +1045,8 @@ function briefBlock(){
 }
 // 브리핑 탭 카드 순서: 각 카드 ✏️ 편집 → ⠿ 로 끌기 (체크리스트 설정 cards 에 저장 → 폰·PC 같음)
 // 🎨 브리핑 탭 카드 색 (카드마다 15색 중 고르기, 체크리스트 설정 cardColors 에 저장 → 폰·PC 공통)
-const CARD_COLORS = [['#e11d48','장미'],['#ef4444','빨강'],['#f97316','주황'],['#f59e0b','호박'],['#eab308','노랑'],['#84cc16','연두'],['#22c55e','초록'],['#10b981','에메랄드'],
-  ['#14b8a6','청록'],['#06b6d4','시안'],['#0ea5e9','하늘'],['#3b82f6','파랑'],['#6366f1','남색'],['#8b5cf6','보라'],['#ec4899','분홍'],['#64748b','회색']];
+const CARD_COLORS = [ // 16색 × 연한·기본·진한 + 검정·흰색 = 50색
+  ['#fda4af','연한 장미'], ['#f43f5e','장미'], ['#be123c','진한 장미'], ['#fca5a5','연한 빨강'], ['#ef4444','빨강'], ['#b91c1c','진한 빨강'], ['#fdba74','연한 주황'], ['#f97316','주황'], ['#c2410c','진한 주황'], ['#fcd34d','연한 호박'], ['#f59e0b','호박'], ['#b45309','진한 호박'], ['#fde047','연한 노랑'], ['#eab308','노랑'], ['#a16207','진한 노랑'], ['#bef264','연한 연두'], ['#84cc16','연두'], ['#4d7c0f','진한 연두'], ['#86efac','연한 초록'], ['#22c55e','초록'], ['#15803d','진한 초록'], ['#6ee7b7','연한 에메랄드'], ['#10b981','에메랄드'], ['#047857','진한 에메랄드'], ['#5eead4','연한 청록'], ['#14b8a6','청록'], ['#0f766e','진한 청록'], ['#67e8f9','연한 시안'], ['#06b6d4','시안'], ['#0e7490','진한 시안'], ['#7dd3fc','연한 하늘'], ['#0ea5e9','하늘'], ['#0369a1','진한 하늘'], ['#93c5fd','연한 파랑'], ['#0a6cff','파랑'], ['#1d4ed8','진한 파랑'], ['#a5b4fc','연한 남색'], ['#6366f1','남색'], ['#4338ca','진한 남색'], ['#c4b5fd','연한 보라'], ['#8b5cf6','보라'], ['#6d28d9','진한 보라'], ['#f9a8d4','연한 분홍'], ['#ec4899','분홍'], ['#be185d','진한 분홍'], ['#cbd5e1','연한 회색'], ['#64748b','회색'], ['#334155','진한 회색'], ['#111827','검정'], ['#ffffff','흰색']];
 const ccol = k => { const c=((layout().cardColors)||{})[k]; return c ? `style="--k:${c}"` : ''; };
 function colorPick(k){ const cur=((layout().cardColors)||{})[k]||'';
   return `<div class="cpick"><span>🎨 카드 색</span><div class="swatches">${CARD_COLORS.map(([c,n])=>`<button title="${n}" style="--sw:${c}" class="${c===cur?'on':''}" data-ccol="${k}|${c}"></button>`).join('')}</div><button class="tbtn" data-ccol="${k}|">기본</button></div>`; }
@@ -1056,15 +1063,37 @@ function editMenu(k){
 function colorSheet(k){
   const cur=((layout().cardColors)||{})[k]||'';
   openSheet(`<h3>🎨 ${CARD_NAMES[k]||''} 카드 색</h3><div class="swatches" style="gap:10px">${CARD_COLORS.map(([c,n])=>`<button title="${n}" style="--sw:${c};width:34px;height:34px" class="${c===cur?'on':''}" data-ccol="${k}|${c}"></button>`).join('')}</div>
-    <div class="form-row"><button class="btn ghost" data-ccol="${k}|">기본 색</button><button class="btn" id="m-cancel">완료</button></div>`);
+    <div class="form-row"><button class="btn ghost" data-cpick="card|${k}">🎚 막대로 직접 고르기</button><button class="btn ghost" data-ccol="${k}|">기본 색</button><button class="btn" id="m-cancel">완료</button></div>`);
 }
 function bucketColorSheet(){
   const L=layout(), bc=L.bucketColors||{}; let ci=0;
   openSheet(`<h3>🟥 체크리스트 안쪽 칸 색</h3>${L.buckets.map(b=>{ const i=(b.id==='late'||isQ(b.id))?0:ci++, cur=bc[b.id]||'';
-    return `<div class="csrow"><b style="color:${bucketColor(b.id,i)}">${esc(b.name)}</b><div class="swatches">${CARD_COLORS.map(([c,n])=>`<button title="${n}" style="--sw:${c}" class="${c===cur?'on':''}" data-bcol="${b.id}|${c}"></button>`).join('')}</div><button class="tbtn" data-bcol="${b.id}|">기본</button></div>`; }).join('')}
+    return `<div class="csrow"><b style="color:${bucketColor(b.id,i)}">${esc(b.name)}</b><div class="swatches">${CARD_COLORS.map(([c,n])=>`<button title="${n}" style="--sw:${c}" class="${c===cur?'on':''}" data-bcol="${b.id}|${c}"></button>`).join('')}</div><button class="tbtn" data-cpick="bucket|${b.id}">🎚 직접</button><button class="tbtn" data-bcol="${b.id}|">기본</button></div>`; }).join('')}
     <div class="form-row"><button class="btn" id="m-cancel">완료</button></div>`);
   $('#sheet').style.maxHeight='92vh'; $('#sheet').style.overflow='auto';
 }
+// 🎚 막대로 색 고르기: 색상(무지개)·진하기·밝기 막대 → 미리보기 → 적용
+function hsl2hex(h,s,l){ s/=100; l/=100; const k=n=>(n+h/30)%12, a=s*Math.min(l,1-l), f=n=>l-a*Math.max(-1,Math.min(k(n)-3,Math.min(9-k(n),1)));
+  return '#'+[f(0),f(8),f(4)].map(x=>Math.round(x*255).toString(16).padStart(2,'0')).join(''); }
+function hex2hsl(hex){ const m=String(hex||'').match(/^#?([0-9a-f]{6})$/i); if(!m) return [220,90,50]; const n=parseInt(m[1],16), r=(n>>16&255)/255, g=(n>>8&255)/255, b=(n&255)/255;
+  const mx=Math.max(r,g,b), mn=Math.min(r,g,b), l=(mx+mn)/2, d=mx-mn; let h=0, s=0;
+  if (d){ s=d/(1-Math.abs(2*l-1)); h = mx===r ? ((g-b)/d)%6 : mx===g ? (b-r)/d+2 : (r-g)/d+4; h=Math.round(h*60); if(h<0) h+=360; }
+  return [h, Math.round(s*100), Math.round(l*100)]; }
+function colorSlider(kind, key){
+  const L=layout(), cur = kind==='card' ? ((L.cardColors||{})[key]||'#0a6cff') : ((L.bucketColors||{})[key]||'#0a6cff');
+  const [h,sa,l] = hex2hsl(String(cur).startsWith('#')?cur:'#0a6cff'); S.cpk={kind,key};
+  openSheet(`<h3>🎚 막대로 색 고르기</h3>
+    <div class="cprev" id="cp-prev"></div>
+    <label class="cpl">색상<input type="range" id="cp-h" min="0" max="359" value="${h}" class="cph"></label>
+    <label class="cpl">진하기<input type="range" id="cp-s" min="0" max="100" value="${sa}"></label>
+    <label class="cpl">밝기<input type="range" id="cp-l" min="5" max="95" value="${l}"></label>
+    <div class="form-row"><input type="color" id="cp-native" value="${hsl2hex(h,sa,l)}" title="다른 방법으로 고르기" style="flex:0 0 56px;height:44px;padding:2px"><button class="btn ghost" id="cp-back">뒤로</button><button class="btn" id="cp-apply">적용</button></div>`);
+  cpUpdate();
+}
+function cpUpdate(){ const h=+$('#cp-h').value, sa=+$('#cp-s').value, l=+$('#cp-l').value, c=hsl2hex(h,sa,l);
+  $('#cp-prev').style.setProperty('--pc', c); $('#cp-prev').textContent=c.toUpperCase();
+  $('#cp-s').style.background=`linear-gradient(90deg,${hsl2hex(h,0,l)},${hsl2hex(h,100,l)})`; $('#cp-l').style.background=`linear-gradient(90deg,#000,${hsl2hex(h,sa,50)},#fff)`;
+  $('#cp-native').value=c; S.cpk.c=c; }
 function vowCard(){
   const v=((layout().vows)||[]).concat(['','','']).slice(0,3), has=v.some(x=>String(x).trim());
   if (S.vowEdit) return `<section class="card vow" ${ccol('vow')}><div class="vh">🔥 나의 다짐 <span class="sp" style="flex:1"></span></div>
@@ -1691,6 +1720,11 @@ document.addEventListener('click', async e => {
     if(!confirm(isLate ? `「${bb?bb.name:''}」 칸을 지울까요? 지난 일정은 원래 칸(없으면 첫 칸)에 「N일 지남」으로 보여요. 편집에서 다시 켤 수 있어요.` : `「${bb?bb.name:''}」 칸을 지울까요? 안의 항목은 다른 칸으로 자동 배치돼요.`)) return;
     if (isLate) L.lateOff=true; L.buckets=L.buckets.filter(x=>x.id!==ds.bdel); delete L.items[ds.bdel]; saveLayout(L); render(); return; }
   if (t.id==='late-on'){ const L=layout(); L.lateOff=false; if (!L.buckets.some(b=>b.id==='late')) L.buckets.unshift({id:'late', name:LATE_NAME}); saveLayout(L); render(); return; }
+  if (ds.cpick){ const i=ds.cpick.indexOf('|'); colorSlider(ds.cpick.slice(0,i), ds.cpick.slice(i+1)); return; }
+  if (t.id==='cp-back'){ const {kind,key}=S.cpk||{}; if (kind==='card') colorSheet(key); else bucketColorSheet(); return; }
+  if (t.id==='cp-apply'){ const {kind,key,c}=S.cpk||{}; if (!c) return; const L=layout();
+    if (kind==='card'){ L.cardColors=L.cardColors||{}; L.cardColors[key]=c; } else { L.bucketColors=L.bucketColors||{}; L.bucketColors[key]=c; }
+    keepLayout(L); const y=window.scrollY; render(); window.scrollTo(0,y); if (kind==='card') colorSheet(key); else bucketColorSheet(); saveLayout(L); toast('🎨 색 적용'); return; }
   if (ds.ccol!==undefined){ const [k,c]=ds.ccol.split('|'), L=layout(); L.cardColors=L.cardColors||{}; if (c) L.cardColors[k]=c; else delete L.cardColors[k];
     const vals = k==='vow' ? [...document.querySelectorAll('[data-vow]')].map(i=>i.value) : null;
     keepLayout(L); const y=window.scrollY; render(); window.scrollTo(0,y); if (vals) document.querySelectorAll('[data-vow]').forEach((i,n)=>{ i.value=vals[n]; }); if ($('#sheetBg').classList.contains('show')) colorSheet(k); saveLayout(L); return; }
@@ -2006,6 +2040,8 @@ try { if (localStorage.getItem('track_open')==='0') S.trackOpen=false; if (local
   const sm=localStorage.getItem('seed_mode'); if (sm) S.seedMode=sm; S.rz=JSON.parse(localStorage.getItem('rz_h')||'{}')||{}; if (+localStorage.getItem('check_h') && !S.rz.check) S.rz.check=+localStorage.getItem('check_h'); const sk=localStorage.getItem('seed_kind'); if (sk) S.seedKind=sk; } catch(_){}
 window.addEventListener('resize', () => { clearTimeout(window.__rs); window.__rs=setTimeout(drawSeedCharts, 150); });
 document.addEventListener('input', e => {
+  if (/^cp-[hsl]$/.test(e.target.id)) { cpUpdate(); return; }
+  if (e.target.id==='cp-native') { const [h,sa,l]=hex2hsl(e.target.value); $('#cp-h').value=h; $('#cp-s').value=sa; $('#cp-l').value=l; cpUpdate(); return; }
   const t=e.target, ds=t.dataset;
   if (ds.wlPrompt!==undefined){ wlItems()[+ds.wlPrompt].prompt = t.value; S.wlDirty=true; const b=$('#wl-save'); if(b){b.disabled=false;b.textContent='변경 내용 저장';} }
   if (t.id==='wl-prompt'){ S.wlPromptDraft=t.value; S.wlDirty=true; const b=$('#wl-save'); if(b){b.disabled=false;b.textContent='변경 내용 저장';} }
