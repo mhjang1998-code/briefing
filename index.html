@@ -265,6 +265,18 @@ nav .nb{position:absolute;top:0;left:50%;margin-left:6px;background:var(--up);co
 .bucket{border:1px solid color-mix(in srgb,var(--bk,var(--faint)) 35%,var(--line));border-left:4px solid var(--bk,var(--faint));
   background:color-mix(in srgb,var(--bk,var(--faint)) 5%,var(--card));border-radius:12px;padding:8px 10px;margin:0 0 8px}
 .bucket.late{--bk:var(--bkLate)}
+.bucket{background:color-mix(in srgb,var(--bk,var(--faint)) 8%,var(--card))!important}
+.bucket .qact{font-size:11px;font-weight:600;color:var(--faint)}
+.qgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;align-items:start} .qgrid .bucket{margin:0}
+.qaxis{display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:11px;font-weight:700;color:var(--faint);text-align:center;margin:2px 0 4px}
+@media (max-width:640px){ .qgrid{grid-template-columns:1fr} .qaxis{display:none} }
+.qgrid + .bucket,.qgrid ~ .bucket{margin-top:8px}
+.qbar{display:flex;height:10px;border-radius:99px;overflow:hidden;margin:4px 0 6px;gap:2px} .qbar span{display:block;min-width:6px}
+.qadv{font-size:13px;font-weight:700;margin:0 0 8px;padding:6px 10px;border-radius:9px;background:color-mix(in srgb,var(--ac) 11%,var(--card));color:color-mix(in srgb,var(--ac) 80%,var(--ink));border:1px solid color-mix(in srgb,var(--ac) 25%,var(--line))}
+.emenu{display:flex;flex-direction:column;gap:6px} .emenu button{display:flex;align-items:center;gap:10px;text-align:left;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:12px;padding:11px 12px;font-size:15px;font-weight:700;cursor:pointer}
+.emenu button small{display:block;font-size:12px;font-weight:400;color:var(--faint)} .emenu button:hover{background:var(--chip)}
+.csrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 0;border-top:1px solid var(--line)} .csrow b{min-width:120px;font-size:13px}
+.csrow .swatches{gap:5px} .csrow .swatches button{width:22px;height:22px}
 .bucket .bh{display:flex;align-items:center;gap:6px;font-weight:800;font-size:14px;color:color-mix(in srgb,var(--bk) 70%,var(--ink));margin-bottom:2px}
 .bucket .bh .count{background:var(--chip);border-radius:99px;padding:0 7px;font-size:11px;color:var(--sub);font-weight:600}
 .bucket .bh .sp{flex:1} .bucket .bh{white-space:nowrap} .bucket .bh .tbtn{padding:2px 8px}
@@ -713,7 +725,7 @@ function trackedList(){
 function trackCard(){
   const list=trackedList(), b=S.data.briefs.find(x=>x.sec_tracking && String(x.sec_tracking).trim());
   if (!list.length && !b) return '';
-  return `<details class="card track ${ED('track')?'editing':''}" ${ccol('track')} ${S.trackOpen===false?'':'open'}><summary>${cardGrip('track')}🎯 추적 중 ${list.length}건<span class="sp"></span>${editBtn('track')}<span class="chev" title="눌러서 접기/펴기">▾</span></summary>${ED('track')?colorPick('track'):''}${rz('track', `
+  return `<details class="card track ${ED('track')?'editing':''}" ${ccol('track')} ${S.trackOpen===false?'':'open'}><summary>${cardGrip('track')}🎯 추적 중 ${list.length}건<span class="sp"></span>${editBtn('track')}<span class="chev" title="눌러서 접기/펴기">▾</span></summary>${rz('track', `
     ${b?`<div class="faint" style="margin:2px 0 4px">${md(b.date)} 진행 상황</div>${renderLines(b.sec_tracking)}`:''}
     ${list.length?`<div style="margin-top:10px">${list.map(t=>`<div class="trow"><div class="tx"><div class="meta">${t.type==='memo'?'내 메모':'답변'} · ${md(t.date)}${t.o.domain?' · '+esc(t.o.domain):''}</div><div class="tt">${esc(t.title)}</div></div>
       <button class="tbtn" data-track="${t.type}|${esc(t.id)}|0">추적 해제</button></div>`).join('')}</div>`
@@ -769,7 +781,7 @@ function seedCard(where){
     <div class="seg"><button data-sview="total" class="${view==='total'?'on':''}">합계</button><button data-sview="area" class="${view==='area'?'on':''}">영역별</button></div></div>`;
   const legend = view==='area' ? `<div class="slegend">${(d.seedList||[]).slice(0,8).map(n=>`<button class="${(S.seedOff||{})[n]?'off':''}" data-soff="${esc(n)}"><i style="background:${seedColor(n)}"></i>${esc(n)}</button>`).join('')}</div>` : '';
   const chart = `${ctrls}<div class="schart" data-schart="1"></div>${legend}<div class="faint" style="margin-top:4px">${mode==='week'?'최근 12주':'최근 12개월'} ${kind==='cum'?'누적 씨앗':(mode==='week'?'주마다 심은 씨앗':'달마다 심은 씨앗')} · 누르거나 올리면 수치</div>`;
-  if (where==='today') return `<details class="card seedcard ${ED('seed')?'editing':''}" ${ccol('seed')} ${S.seedOpen===false?'':'open'}><summary>${cardGrip('seed')}🌱 씨앗 ${sum(()=>true)}개 쌓는 중<span class="sp"></span>${editBtn('seed')}<span class="chev" title="눌러서 접기/펴기">▾</span></summary>${ED('seed')?colorPick('seed'):''}
+  if (where==='today') return `<details class="card seedcard ${ED('seed')?'editing':''}" ${ccol('seed')} ${S.seedOpen===false?'':'open'}><summary>${cardGrip('seed')}🌱 씨앗 ${sum(()=>true)}개 쌓는 중<span class="sp"></span>${editBtn('seed')}<span class="chev" title="눌러서 접기/펴기">▾</span></summary>
     ${rz('seed', `${stats}${chart}<div style="margin-top:12px"><b style="font-size:13px">오늘 심은 씨앗</b><div style="margin-top:6px">${seedButtons(today)}</div></div>`, '', ED('seed'))}</details>`;
   return `<section class="card"><h2>🌱 씨앗 성장</h2>${stats}${chart}</section>`;
 }
@@ -833,6 +845,10 @@ async function seedCall(fn, ...args){ toast('저장 중…'); const r=await call
    칸 구성과 순서 = { buckets:[{id,name}], items:{칸id:[ 's:<일정id>' | 't:<할일id>' ]} }
    → 서버 설정 「체크리스트」(uiSaveUiSetting), 서버가 아직 모르면 이 기기(localStorage)에 저장 */
 const LATE_NAME = '⚠️ 지난 일정';
+const QUADS = [{id:'q1',name:'🔴 ① 긴급·중요',act:'지금 하기',c:'#dc2626'},{id:'q2',name:'🟢 ② 안 급함·중요',act:'시간 정해 두기',c:'#16a34a'},
+  {id:'q3',name:'🟠 ③ 긴급·안 중요',act:'짧게 처리',c:'#ea580c'},{id:'q4',name:'⚪ ④ 안 급함·안 중요',act:'줄이거나 빼기',c:'#64748b'}];
+const isQ = id => /^q[1-4]$/.test(id);
+const bucketColor = (id, i) => ((layout().bucketColors)||{})[id] || (id==='late' ? '#b91c1c' : (QUADS.find(q=>q.id===id)||{}).c || ['#2563eb','#7c3aed','#0891b2','#db2777','#65a30d'][(i||0)%5]);
 const DEF_BUCKETS = [{id:'b1',name:'🔥 긴급한 일'},{id:'b2',name:'⭐ 중요한 일'},{id:'b3',name:'🌿 안 중요한 일'}];
 function layout(){
   let L = (S.data.uiset||{}).checklist;
@@ -840,6 +856,12 @@ function layout(){
   if (!L || !Array.isArray(L.buckets) || !L.buckets.length) L = { buckets: DEF_BUCKETS.map(b=>Object.assign({},b)), items:{} };
   L.items = L.items || {};
   if (!L.lateOff && !L.buckets.some(b=>b.id==='late')) L.buckets.unshift({id:'late', name:LATE_NAME});
+  // 🔲 아이젠하워 4칸으로 한 번 옮기기: 긴급한 일→①, 중요한 일→②, 안 중요한 일→④, ③ 새로
+  if (!L.matrix){ const mv={b1:'q1', b2:'q2', b3:'q4'};
+    L.buckets = L.buckets.filter(b=>!mv[b.id]);
+    Object.keys(mv).forEach(o => { if (L.items[o]){ L.items[mv[o]] = (L.items[mv[o]]||[]).concat(L.items[o]); delete L.items[o]; } });
+    L.matrix = 1; }
+  QUADS.forEach(q => { if (!L.buckets.some(b=>b.id===q.id)) L.buckets.push({id:q.id, name:q.name}); });
   return L;
 }
 async function saveLayout(L){
@@ -897,9 +919,13 @@ function checkBuckets(){
   const lateK = new Set(late.map(x=>x.k));
   const out = L.buckets.filter(b=>b.id!=='late').map(b => ({ b, list: (L.items[b.id]||[]).filter(k => byKey[k] && !lateK.has(k)).map(k => byKey[k]) }));
   const placed = new Set(out.flatMap(o => o.list.map(x=>x.k)));
-  // 아직 칸이 없는 것: 3일 이내 마감 → 첫 칸, 나머지 → 둘째 칸
+  // 아직 칸이 없는 것: 3일 이내 마감 → ①, 나머지 → ②
+  const ob = id => out.find(o=>o.b.id===id) || out[0];
   all.filter(x => !lateK.has(x.k) && !placed.has(x.k)).sort((a,b)=>(a.date||'9999').localeCompare(b.date||'9999'))
-    .forEach(x => { const tgt = (x.date && dayDiff(x.date) <= 3) ? out[0] : (out[1] || out[out.length-1]); if (tgt) tgt.list.push(x); });
+    .forEach(x => { const tgt = ob((x.date && dayDiff(x.date) <= 3) ? 'q1' : 'q2'); if (tgt) tgt.list.push(x); });
+  // ⏰ 마감 3일 이내가 되면 자동으로: ② → ①, ④ → ③
+  [['q2','q1'],['q4','q3']].forEach(([f,t]) => { const F=out.find(o=>o.b.id===f), T=out.find(o=>o.b.id===t); if (!F||!T) return;
+    const mv=F.list.filter(x=>x.date && dayDiff(x.date)<=3); if (mv.length){ F.list=F.list.filter(x=>!mv.includes(x)); T.list=mv.concat(T.list); } });
   return { late, out, L, lateOn };
 }
 function ckRow(x, drag){
@@ -923,28 +949,40 @@ function checklistCard(){
   const late = cb.late.filter(keep); out.forEach(o => { o.list = o.list.filter(keep); });
   const ed = ED('check'), dr = ed && !tf;
   const warn = d.calError ? `<div class="faint" style="color:var(--warn);margin-bottom:6px">📅 구글 캘린더 연결 안 됨 — Apps Script 편집기에서 <b>authorize</b> 함수를 한 번 실행해 권한을 허용해 주세요</div>` : '';
-  const ctl = () => dr ? `<span class="bgrip" title="끌어서 칸 순서 바꾸기">⠿</span>` : '';
   const edb = (id, canDel) => ed ? `<button class="tbtn" data-bren="${esc(id)}" title="이름 바꾸기">✏️</button>${canDel?`<button class="tbtn" data-bdel="${esc(id)}" title="칸 삭제">🗑</button>`:''}` : '';
-  let ci=0;
-  const cards = L.buckets.map(b => {
-    if (b.id==='late') return `<div class="bucket late ${!late.length&&!ed?'empty':''}" data-bid="late">
-      <div class="bh">${ctl()}${esc(b.name)} <span class="count">${late.length}</span><span class="sp"></span>${edb('late', true)}</div>
-      ${!late.length&&!ed ? '' : rz('bk:late', late.map(x=>ckRow(x, dr?'pad':false)).join('') || '<div class="empty-b">지난 일정 없음 👍</div>', '', ed)}</div>`;
-    const o=out.find(x=>x.b.id===b.id), i=ci++;
-    return `<div class="bucket ${!o.list.length&&!ed?'empty':''}" data-bid="${esc(b.id)}" data-bucket="${esc(b.id)}" style="--bk:var(--bk${i%5})">
-      <div class="bh">${ctl()}${esc(b.name)} <span class="count">${o.list.length}</span><span class="sp"></span>
-        <button class="tbtn" data-badd="${esc(b.id)}" title="이 칸에 할 일 추가">＋</button>${edb(b.id, nNormal>1)}</div>
-      ${!o.list.length&&!ed ? '' : rz('bk:'+b.id, `<div class="blist">${o.list.map(x=>ckRow(x,dr)).join('') || '<div class="empty-b">⠿ 를 잡고 여기로 끌어다 놓기</div>'}</div>`, '', ed)}</div>`;
-  }).join('');
+  const qn = id => (out.find(o=>o.b.id===id)||{list:[]}).list.length;
+  const bk = (b, i) => { const o=out.find(x=>x.b.id===b.id), q=QUADS.find(x=>x.id===b.id);
+    return `<div class="bucket ${!o.list.length&&!ed?'empty':''}" data-bid="${esc(b.id)}" data-bucket="${esc(b.id)}" style="--bk:${bucketColor(b.id,i)}">
+      <div class="bh">${esc(b.name)} <span class="count">${o.list.length}</span>${q?`<small class="qact">${q.act}</small>`:''}<span class="sp"></span>
+        <button class="tbtn" data-badd="${esc(b.id)}" title="이 칸에 할 일 추가">＋</button>${edb(b.id, !q)}</div>
+      ${!o.list.length&&!ed ? '' : rz('bk:'+b.id, `<div class="blist">${o.list.map(x=>ckRow(x,dr)).join('') || '<div class="empty-b">⠿ 를 잡고 여기로 끌어다 놓기</div>'}</div>`, '', ed)}</div>`; };
+  const lb = L.buckets.find(b=>b.id==='late');
+  const lateHtml = lb ? `<div class="bucket late ${!late.length&&!ed?'empty':''}" data-bid="late" style="--bk:${bucketColor('late')}">
+      <div class="bh">${esc(lb.name)} <span class="count">${late.length}</span><span class="sp"></span>${edb('late', true)}</div>
+      ${!late.length&&!ed ? '' : rz('bk:late', late.map(x=>ckRow(x, dr?'pad':false)).join('') || '<div class="empty-b">지난 일정 없음 👍</div>', '', ed)}</div>` : '';
+  const qb = id => L.buckets.find(b=>b.id===id);
+  const grid = `<div class="qaxis"><span>⏰ 긴급</span><span>🕊 안 급함</span></div><div class="qgrid">${['q1','q2','q3','q4'].map(id=>bk(qb(id))).join('')}</div>`;
+  const extra = L.buckets.filter(b=>b.id!=='late' && !isQ(b.id)).map((b,i)=>bk(b,i)).join('');
+  const cards = lateHtml + grid + extra;
+  // ⚖️ 균형 막대 + 한 줄 조언 (아이젠하워: ①이 넘치면 ②를 미뤄 온 신호)
+  const [a,b2,c,d4] = ['q1','q2','q3','q4'].map(qn), tot=a+b2+c+d4;
+  const adv = late.length ? ['late',`⚠️ 밀린 일 ${late.length}개 — 오늘 끝내거나 날짜부터 다시 잡기`]
+    : (a>b2 && a>=3) ? ['q1','🔴 급한 일이 넘쳐요 — ②를 미뤄 온 신호. ②에 30분 블록 하나 잡기']
+    : (!b2 && tot) ? ['q2','🟢 목표를 위한 일(②)이 비었어요 — 하나만 넣어 보기']
+    : (c>a) ? ['q3','🟠 덜 중요한 급한 일이 많아요 — 한 번에 몰아서 짧게 처리']
+    : (d4>=4) ? ['q4','⚪ ④가 쌓여요 — 지울 건 지우기']
+    : tot ? ['q2','👍 균형 좋아요 — 오늘은 ②에 집중'] : null;
+  const balance = tot ? `<div class="qbar">${['q1','q2','q3','q4'].map((id,i)=>[a,b2,c,d4][i]?`<span style="flex:${[a,b2,c,d4][i]};background:${bucketColor(id)}" title="${esc(qb(id).name)} ${[a,b2,c,d4][i]}"></span>`:'').join('')}</div>` : '';
+  const advHtml = adv ? `<div class="qadv" style="--ac:${bucketColor(adv[0])}">${adv[1]}</div>` : '';
   // 맨 위 요약: 칸별 개수 + 마감 D-3·D-7·D-14 (누적, 날짜 있는 것만)
-  const counts = L.buckets.map(b => `<span class="ckc" title="${esc(b.name)}">${bIcon(b.name)} ${b.id==='late'?late.length:out.find(x=>x.b.id===b.id).list.length}</span>`).join('');
+  const counts = L.buckets.map((b,i) => `<span class="ckc" title="${esc(b.name)}" style="background:color-mix(in srgb,${bucketColor(b.id,i)} 16%,var(--chip));color:color-mix(in srgb,${bucketColor(b.id,i)} 80%,var(--ink))">${bIcon(b.name)} ${b.id==='late'?late.length:out.find(x=>x.b.id===b.id).list.length}</span>`).join('');
   const dd = [].concat(...out.map(o=>o.list)).filter(x=>x.date).map(x=>dayDiff(x.date)).filter(n=>n>=0);
   const dc = n => dd.filter(x=>x<=n).length;
   const dHtml = dd.some(n=>n<=14) ? `<span class="sep">│</span><span class="dtag r dcnt" title="3일 안에 마감">3일 내 <b>${dc(3)}</b></span><span class="dtag o dcnt" title="7일 안에 마감">7일 내 <b>${dc(7)}</b></span><span class="dtag y dcnt" title="14일 안에 마감">14일 내 <b>${dc(14)}</b></span>` : '';
   return `<details class="card checklist ${ed?'editing':''}" ${ccol('check')} ${S.checkOpen===false?'':'open'}><summary class="cksum">${cardGrip('check')}✅ 체크리스트 ${counts}${dHtml}<span class="sp"></span>
-      <button class="tbtn edbtn" id="todo-new" title="할 일 추가">＋</button>${editBtn('check')}<span class="chev" title="눌러서 접기/펴기">▾</span></summary>${ED('check')?colorPick('check'):''}${warn}
+      <button class="tbtn edbtn" id="todo-new" title="할 일 추가">＋</button>${editBtn('check')}<span class="chev" title="눌러서 접기/펴기">▾</span></summary>${balance}${advHtml}${warn}
     ${tf?`<div class="ckfilter">🏷️ ${tagPill(tagDefs().find(t=>t.id===tf), `data-ctag="${tf}"`, true)} 태그만 보는 중<button class="tbtn" data-ctag="${tf}" style="margin-left:auto">✕ 전체 보기</button></div>`:''}
-    ${ed?`<div class="tools" style="margin:0 0 6px"><button class="tbtn" id="bucket-add">＋ 칸 추가</button><button class="tbtn ${sortOn?'on':''}" id="sort-due">⏰ 마감순 ${sortOn?'켜짐':'꺼짐'}</button><button class="tbtn" id="tag-manage">🏷️ 태그 관리</button>${lateOn?'':'<button class="tbtn" id="late-on">⚠️ 지난 일정 칸 다시 켜기</button>'}<span class="faint" style="margin-left:auto">⠿ 끌기 · ✏️ 이름 · 🗑 삭제 · ━ 길이</span></div>`:''}
+    ${ed?`<div class="tools" style="margin:0 0 6px"><button class="tbtn" id="bucket-add">＋ 칸 추가</button>${lateOn?'':'<button class="tbtn" id="late-on">⚠️ 지난 일정 칸 다시 켜기</button>'}<span class="faint" style="margin-left:auto">⠿ 항목 끌기 · ✏️ 칸 이름 · ━ 길이</span></div>`:''}
     ${rz('check', cards, 'ckbody', ed)}</details>`;
 }
 // ⏰ 시간 고르기: 오전/오후 대신 24시간제(00~23시) + 분. 값은 숨은 input(id)에 "HH:MM" 또는 ""
@@ -967,7 +1005,7 @@ function todoSheet(t){
 function indicatorsCard(){
   const b=S.data.briefs.find(x=>x.sec_indicators && String(x.sec_indicators).trim());
   if (!b) return '';
-  return `<details class="card daily ${ED('ind')?'editing':''}" ${ccol('ind')} ${S.dailyOpen===false?'':'open'}><summary>${cardGrip('ind')}📈 증시 · 관심 지표 · ${md(b.date)}<span class="sp"></span>${editBtn('ind')}<span class="chev" title="눌러서 접기/펴기">▾</span></summary>${ED('ind')?colorPick('ind'):''}${rz('ind', renderIndicators(b.sec_indicators, ED('ind')?'drag':'sort'), '', ED('ind'))}</details>`;
+  return `<details class="card daily ${ED('ind')?'editing':''}" ${ccol('ind')} ${S.dailyOpen===false?'':'open'}><summary>${cardGrip('ind')}📈 증시 · 관심 지표 · ${md(b.date)}<span class="sp"></span>${editBtn('ind')}<span class="chev" title="눌러서 접기/펴기">▾</span></summary>${rz('ind', renderIndicators(b.sec_indicators, ED('ind')?'drag':'sort'), '', ED('ind'))}</details>`;
 }
 const CARD_KEYS = ['check','ind','seed','track','brief'];
 function cardOrder(){ const c=(layout().cards||[]).filter(k=>CARD_KEYS.includes(k)); return c.concat(CARD_KEYS.filter(k=>!c.includes(k))); }
@@ -975,7 +1013,7 @@ function briefBlock(){
   const d=S.data, items=unseenList('item'), ed=ED('brief');
   const fold = S.briefOpen===false;
   const bar0 = n => `<div class="card bar ${ed?'editing':''} ${fold&&n?'folded':''}" ${ccol('brief')}>${cardGrip('brief')}<b data-bfold="1" style="cursor:pointer">📋 일일 브리핑 ${n}건</b><span class="faint">${n?'[✓ 확인] → 📝 메모 탭에 저장':'새 브리핑이 없어요 👏'}</span><span class="sp"></span>${editBtn('brief')}${n?'<button class="chev" data-bfold="1" title="눌러서 접기/펴기">▾</button>':''}</div>`;
-  const bar = n => bar0(n) + (ed ? colorPick('brief') : '');
+  const bar = n => bar0(n);
   if (!items.length) return bar(0);
   if (fold) return bar(items.length);
   let html = bar(items.length), last=null, buf='';
@@ -996,13 +1034,34 @@ const CARD_COLORS = [['#e11d48','장미'],['#ef4444','빨강'],['#f97316','주�
 const ccol = k => { const c=((layout().cardColors)||{})[k]; return c ? `style="--k:${c}"` : ''; };
 function colorPick(k){ const cur=((layout().cardColors)||{})[k]||'';
   return `<div class="cpick"><span>🎨 카드 색</span><div class="swatches">${CARD_COLORS.map(([c,n])=>`<button title="${n}" style="--sw:${c}" class="${c===cur?'on':''}" data-ccol="${k}|${c}"></button>`).join('')}</div><button class="tbtn" data-ccol="${k}|">기본</button></div>`; }
+// ✏️ 편집 메뉴: 카드 ✏️ → 무엇을 편집할지 고르기
+const CARD_NAMES = {check:'✅ 체크리스트', ind:'📈 증시·관심 지표', seed:'🌱 씨앗', track:'🎯 추적', brief:'📋 일일 브리핑', vow:'🔥 나의 다짐'};
+function editMenu(k){
+  const L=layout(), sortOn=L.sortDue!==false, it=(icon,label,sub,attr)=>`<button ${attr}><span style="font-size:20px">${icon}</span><span>${label}${sub?`<small>${sub}</small>`:''}</span></button>`;
+  const items = k==='vow' ? [it('✏️','다짐 고치기','',`id="vow-edit"`), it('🎨','카드 색','카드 배경·테두리 색',`data-cmenu="vow"`)]
+    : [it('↕','순서·길이 편집', k==='check'?'항목 끌어 옮기기 · 칸 이름 바꾸기·추가 · 길이 조절':'카드 순서 끌기 · 길이 조절', `data-emode="${k}"`), it('🎨','카드 색','큰 카드의 배경·테두리 색',`data-cmenu="${k}"`)]
+      .concat(k==='check' ? [it('🟥','안쪽 칸 색','지난 일정 · ①~④ 칸 색을 따로',`data-bcmenu="1"`), it('🏷️','태그 관리','이름·색·삭제',`id="tag-manage"`),
+        it('⏰',`마감순 정렬 ${sortOn?'끄기':'켜기'}`, `지금: ${sortOn?'켜짐 — 급한 마감이 위로':'꺼짐 — 끌어 둔 순서'}`,`id="sort-due"`)] : []);
+  openSheet(`<h3>✏️ ${CARD_NAMES[k]||''} 편집</h3><div class="emenu">${items.join('')}</div><div class="form-row"><button class="btn ghost" id="m-cancel">닫기</button></div>`);
+}
+function colorSheet(k){
+  const cur=((layout().cardColors)||{})[k]||'';
+  openSheet(`<h3>🎨 ${CARD_NAMES[k]||''} 카드 색</h3><div class="swatches" style="gap:10px">${CARD_COLORS.map(([c,n])=>`<button title="${n}" style="--sw:${c};width:34px;height:34px" class="${c===cur?'on':''}" data-ccol="${k}|${c}"></button>`).join('')}</div>
+    <div class="form-row"><button class="btn ghost" data-ccol="${k}|">기본 색</button><button class="btn" id="m-cancel">완료</button></div>`);
+}
+function bucketColorSheet(){
+  const L=layout(), bc=L.bucketColors||{}; let ci=0;
+  openSheet(`<h3>🟥 체크리스트 안쪽 칸 색</h3>${L.buckets.map(b=>{ const i=(b.id==='late'||isQ(b.id))?0:ci++, cur=bc[b.id]||'';
+    return `<div class="csrow"><b style="color:${bucketColor(b.id,i)}">${esc(b.name)}</b><div class="swatches">${CARD_COLORS.map(([c,n])=>`<button title="${n}" style="--sw:${c}" class="${c===cur?'on':''}" data-bcol="${b.id}|${c}"></button>`).join('')}</div><button class="tbtn" data-bcol="${b.id}|">기본</button></div>`; }).join('')}
+    <div class="form-row"><button class="btn" id="m-cancel">완료</button></div>`);
+  $('#sheet').style.maxHeight='92vh'; $('#sheet').style.overflow='auto';
+}
 function vowCard(){
   const v=((layout().vows)||[]).concat(['','','']).slice(0,3), has=v.some(x=>String(x).trim());
   if (S.vowEdit) return `<section class="card vow" ${ccol('vow')}><div class="vh">🔥 나의 다짐 <span class="sp" style="flex:1"></span></div>
     ${v.map((x,i)=>`<input data-vow="${i}" value="${esc(x)}" maxlength="80" placeholder="다짐 ${i+1}">`).join('')}
-    ${colorPick('vow')}
     <div class="form-row" style="margin-top:6px"><button class="btn ghost" id="vow-cancel">취소</button><button class="btn" id="vow-save">저장</button></div></section>`;
-  return `<section class="card vow" ${ccol('vow')}><div class="vh">🔥 나의 다짐<span class="sp" style="flex:1"></span><button class="tbtn edbtn" id="vow-edit" title="다짐 고치기">✏️</button></div>
+  return `<section class="card vow" ${ccol('vow')}><div class="vh">🔥 나의 다짐<span class="sp" style="flex:1"></span><button class="tbtn edbtn" data-ed="vow" title="편집">✏️</button></div>
     ${has ? `<ol>${v.filter(x=>String(x).trim()).map(x=>`<li>${esc(x)}</li>`).join('')}</ol>` : `<div class="faint">✏️ 를 눌러 매일 볼 다짐 3가지를 적어 두세요</div>`}</section>`;
 }
 function viewToday(){
@@ -1607,6 +1666,13 @@ document.addEventListener('click', async e => {
   const t=e.target.closest('button, [data-open-b], input.chk, .ck .body'); if(!t) return;
   const ds=t.dataset;
   if (t.closest('nav') && ds.tab){ if (S.tab===ds.tab && ds.tab==='manage') S.dom=null; S.tab=ds.tab; S.briefDate=null; window.scrollTo(0,0); render(); return; }
+  if (ds.ed && !ED(ds.ed) && !['sched','todo'].includes(ds.ed)){ e.preventDefault(); editMenu(ds.ed); return; }
+  if (ds.emode){ closeSheet(); S.ed=S.ed||{}; S.ed[ds.emode]=true; ({check:()=>S.checkOpen=true, ind:()=>S.dailyOpen=true, seed:()=>S.seedOpen=true, track:()=>S.trackOpen=true})[ds.emode]?.();
+    const y=window.scrollY; render(); window.scrollTo(0,y); return; }
+  if (ds.cmenu){ colorSheet(ds.cmenu); return; }
+  if (ds.bcmenu){ bucketColorSheet(); return; }
+  if (ds.bcol!==undefined){ const [k,c]=ds.bcol.split('|'), L=layout(); L.bucketColors=L.bucketColors||{}; if (c) L.bucketColors[k]=c; else delete L.bucketColors[k];
+    keepLayout(L); const y=window.scrollY; render(); window.scrollTo(0,y); const sc=$('#sheet').scrollTop; bucketColorSheet(); $('#sheet').scrollTop=sc; saveLayout(L); return; }
   if (ds.ed){ e.preventDefault(); S.ed=S.ed||{}; S.ed[ds.ed]=!S.ed[ds.ed];
     if (S.ed[ds.ed]) ({check:()=>S.checkOpen=true, ind:()=>S.dailyOpen=true, seed:()=>S.seedOpen=true, track:()=>S.trackOpen=true})[ds.ed]?.();
     const y=window.scrollY; render(); window.scrollTo(0,y); return; }
@@ -1618,8 +1684,8 @@ document.addEventListener('click', async e => {
   if (t.id==='late-on'){ const L=layout(); L.lateOff=false; if (!L.buckets.some(b=>b.id==='late')) L.buckets.unshift({id:'late', name:LATE_NAME}); saveLayout(L); render(); return; }
   if (ds.ccol!==undefined){ const [k,c]=ds.ccol.split('|'), L=layout(); L.cardColors=L.cardColors||{}; if (c) L.cardColors[k]=c; else delete L.cardColors[k];
     const vals = k==='vow' ? [...document.querySelectorAll('[data-vow]')].map(i=>i.value) : null;
-    keepLayout(L); const y=window.scrollY; render(); window.scrollTo(0,y); if (vals) document.querySelectorAll('[data-vow]').forEach((i,n)=>{ i.value=vals[n]; }); saveLayout(L); return; }
-  if (t.id==='vow-edit'){ S.vowEdit=true; render(); setTimeout(()=>{ const i=document.querySelector('[data-vow="0"]'); if(i) i.focus(); },30); return; }
+    keepLayout(L); const y=window.scrollY; render(); window.scrollTo(0,y); if (vals) document.querySelectorAll('[data-vow]').forEach((i,n)=>{ i.value=vals[n]; }); if ($('#sheetBg').classList.contains('show')) colorSheet(k); saveLayout(L); return; }
+  if (t.id==='vow-edit'){ closeSheet(); S.vowEdit=true; render(); setTimeout(()=>{ const i=document.querySelector('[data-vow="0"]'); if(i) i.focus(); },30); return; }
   if (t.id==='vow-cancel'){ S.vowEdit=false; render(); return; }
   if (t.id==='vow-save'){ const L=layout(); L.vows=[...document.querySelectorAll('[data-vow]')].map(i=>i.value.trim()); S.vowEdit=false; keepLayout(L); render(); await saveLayout(L); toast('🔥 다짐 저장됨'); return; }
   if (t.id==='gal-new'){ galNewSheet(); return; }
@@ -1673,7 +1739,7 @@ document.addEventListener('click', async e => {
     const ids=new Set(keep.map(x=>x.id)), live=new Set((S.data.schedules||[]).map(x=>'s:'+x.id).concat((S.data.todos||[]).map(x=>'t:'+x.id)));
     L.tagDefs=keep; L.tags=L.tags||{}; Object.keys(L.tags).forEach(k=>{ const a=L.tags[k].filter(id=>ids.has(id)); if (!a.length || !live.has(k)) delete L.tags[k]; else L.tags[k]=a; });
     S.tmDraft=null; closeSheet(); saveLayout(L); const y=window.scrollY; render(); window.scrollTo(0,y); toast('태그 저장됨'); return; }
-  if (t.id==='sort-due'){ const L=layout(); L.sortDue = L.sortDue===false; saveLayout(L); const y=window.scrollY; render(); window.scrollTo(0,y); toast(L.sortDue?'⏰ 마감 급한 순으로 정렬':'끌어 둔 순서대로'); return; }
+  if (t.id==='sort-due'){ closeSheet(); const L=layout(); L.sortDue = L.sortDue===false; saveLayout(L); const y=window.scrollY; render(); window.scrollTo(0,y); toast(L.sortDue?'⏰ 마감 급한 순으로 정렬':'끌어 둔 순서대로'); return; }
   if (t.id==='bucket-add'){ const v=prompt('새 칸 이름 (예: 📚 공부, 💼 인턴)'); if(!v||!v.trim()) return; const L=layout(); L.buckets.push({id:'b'+Date.now().toString(36), name:v.trim()}); saveLayout(L); render(); return; }
   if (t.id==='todo-new'){ e.preventDefault(); S.addBucket=null; todoSheet(null); return; }
   if (ds.editT){ todoSheet((S.data.todos||[]).find(x=>x.id===ds.editT)); return; }
