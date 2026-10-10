@@ -19,6 +19,7 @@
   --ok:#15803d; --chip:#eef0f3; --shadow:0 1px 2px rgba(16,24,40,.06);
   --k-check:#d97706; --k-ind:#2563eb; --k-seed:#16a34a; --k-track:#7c3aed; --k-brief:#0e7490;
   --bk0:#dc2626; --bk1:#d97706; --bk2:#16a34a; --bk3:#2563eb; --bk4:#7c3aed; --bkLate:#b91c1c;
+  --qLate:#1f2937; --q1:#e11d1d; --q2:#0a6cff; --q3:#f59e0b; --q4:#8b5cf6;
   --k-ana:#2563eb; --k-think:#7c3aed; --k-dec:#16a34a; --k-etc:#d97706; --k-q:#db2777;
   --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100; --s5:#e87ba4; --s6:#008300; --s7:#4a3aa7; --s8:#e34948; --seed:#1f9d55;
 }
@@ -28,6 +29,7 @@
   --ok:#4ade80; --chip:#262a30; --shadow:none;
   --k-check:#f59e0b; --k-ind:#60a5fa; --k-seed:#4ade80; --k-track:#a78bfa; --k-brief:#22d3ee;
   --bk0:#f87171; --bk1:#fbbf24; --bk2:#4ade80; --bk3:#60a5fa; --bk4:#a78bfa; --bkLate:#f87171;
+  --qLate:#e5e7eb; --q1:#f87171; --q2:#4d9bff; --q3:#fbbf24; --q4:#b49bff;
   --k-ana:#60a5fa; --k-think:#a78bfa; --k-dec:#4ade80; --k-etc:#f59e0b; --k-q:#f472b6;
   --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#d55181; --s6:#008300; --s7:#9085e9; --s8:#e66767; --seed:#4ade80;
 }}
@@ -267,7 +269,9 @@ nav .nb{position:absolute;top:0;left:50%;margin-left:6px;background:var(--up);co
 .bucket.late{--bk:var(--bkLate)}
 .bucket{background:color-mix(in srgb,var(--bk,var(--faint)) 8%,var(--card))!important}
 .bucket .qact{font-size:11px;font-weight:600;color:var(--faint)}
-.qgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;align-items:start} .qgrid .bucket{margin:0}
+.qgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;align-items:stretch} .qgrid .bucket{margin:0;display:flex;flex-direction:column;min-height:132px}
+.qgrid .bucket > .rzb{flex:1} .qgrid .blist{min-height:70px;height:100%}
+.qgrid .empty-q{flex:1;display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--faint);border:1px dashed color-mix(in srgb,var(--bk) 30%,var(--line));border-radius:8px;margin-top:4px;min-height:70px}
 .qaxis{display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:11px;font-weight:700;color:var(--faint);text-align:center;margin:2px 0 4px}
 @media (max-width:640px){ .qgrid{grid-template-columns:1fr} .qaxis{display:none} }
 .qgrid + .bucket,.qgrid ~ .bucket{margin-top:8px}
@@ -845,10 +849,12 @@ async function seedCall(fn, ...args){ toast('저장 중…'); const r=await call
    칸 구성과 순서 = { buckets:[{id,name}], items:{칸id:[ 's:<일정id>' | 't:<할일id>' ]} }
    → 서버 설정 「체크리스트」(uiSaveUiSetting), 서버가 아직 모르면 이 기기(localStorage)에 저장 */
 const LATE_NAME = '⚠️ 지난 일정';
-const QUADS = [{id:'q1',name:'🔴 ① 긴급·중요',act:'지금 하기',c:'#dc2626'},{id:'q2',name:'🟢 ② 안 급함·중요',act:'시간 정해 두기',c:'#16a34a'},
-  {id:'q3',name:'🟠 ③ 긴급·안 중요',act:'짧게 처리',c:'#ea580c'},{id:'q4',name:'⚪ ④ 안 급함·안 중요',act:'줄이거나 빼기',c:'#64748b'}];
+// 기본 색: 다섯 칸이 확실히 구분되게 (검정·빨강·파랑·주황·보라, 다크 모드는 밝은 톤) — CSS 변수 --qLate·--q1~4
+const QUADS = [{id:'q1',name:'🔴 ① 긴급·중요',act:'지금 하기',c:'var(--q1)'},{id:'q2',name:'🔵 ② 안 급함·중요',act:'시간 정해 두기',c:'var(--q2)'},
+  {id:'q3',name:'🟠 ③ 긴급·안 중요',act:'짧게 처리',c:'var(--q3)'},{id:'q4',name:'🟣 ④ 안 급함·안 중요',act:'줄이거나 빼기',c:'var(--q4)'}];
+const OLD_QNAMES = {q2:'🟢 ② 안 급함·중요', q4:'⚪ ④ 안 급함·안 중요'};
 const isQ = id => /^q[1-4]$/.test(id);
-const bucketColor = (id, i) => ((layout().bucketColors)||{})[id] || (id==='late' ? '#b91c1c' : (QUADS.find(q=>q.id===id)||{}).c || ['#2563eb','#7c3aed','#0891b2','#db2777','#65a30d'][(i||0)%5]);
+const bucketColor = (id, i) => ((layout().bucketColors)||{})[id] || (id==='late' ? 'var(--qLate)' : (QUADS.find(q=>q.id===id)||{}).c || ['#2563eb','#7c3aed','#0891b2','#db2777','#65a30d'][(i||0)%5]);
 const DEF_BUCKETS = [{id:'b1',name:'🔥 긴급한 일'},{id:'b2',name:'⭐ 중요한 일'},{id:'b3',name:'🌿 안 중요한 일'}];
 function layout(){
   let L = (S.data.uiset||{}).checklist;
@@ -862,6 +868,8 @@ function layout(){
     Object.keys(mv).forEach(o => { if (L.items[o]){ L.items[mv[o]] = (L.items[mv[o]]||[]).concat(L.items[o]); delete L.items[o]; } });
     L.matrix = 1; }
   QUADS.forEach(q => { if (!L.buckets.some(b=>b.id===q.id)) L.buckets.push({id:q.id, name:q.name}); });
+  // 색 v2: 다섯 칸 기본 색을 새로 적용(예전 칸 색 선택은 비움), 기본 이름의 색 이모지도 맞춤
+  if (L.colorV!==2){ delete L.bucketColors; L.buckets.forEach(b => { if (OLD_QNAMES[b.id] && b.name===OLD_QNAMES[b.id]) b.name=QUADS.find(q=>q.id===b.id).name; }); L.colorV=2; }
   return L;
 }
 async function saveLayout(L){
@@ -952,10 +960,11 @@ function checklistCard(){
   const edb = (id, canDel) => ed ? `<button class="tbtn" data-bren="${esc(id)}" title="이름 바꾸기">✏️</button>${canDel?`<button class="tbtn" data-bdel="${esc(id)}" title="칸 삭제">🗑</button>`:''}` : '';
   const qn = id => (out.find(o=>o.b.id===id)||{list:[]}).list.length;
   const bk = (b, i) => { const o=out.find(x=>x.b.id===b.id), q=QUADS.find(x=>x.id===b.id);
-    return `<div class="bucket ${!o.list.length&&!ed?'empty':''}" data-bid="${esc(b.id)}" data-bucket="${esc(b.id)}" style="--bk:${bucketColor(b.id,i)}">
+    const emptyQ = q && !o.list.length;
+    return `<div class="bucket ${!o.list.length&&!ed&&!q?'empty':''}" data-bid="${esc(b.id)}" data-bucket="${esc(b.id)}" style="--bk:${bucketColor(b.id,i)}">
       <div class="bh">${esc(b.name)} <span class="count">${o.list.length}</span>${q?`<small class="qact">${q.act}</small>`:''}<span class="sp"></span>
         <button class="tbtn" data-badd="${esc(b.id)}" title="이 칸에 할 일 추가">＋</button>${edb(b.id, !q)}</div>
-      ${!o.list.length&&!ed ? '' : rz('bk:'+b.id, `<div class="blist">${o.list.map(x=>ckRow(x,dr)).join('') || '<div class="empty-b">⠿ 를 잡고 여기로 끌어다 놓기</div>'}</div>`, '', ed)}</div>`; };
+      ${emptyQ ? `<div class="blist empty-q">${ed?'⠿ 를 잡고 여기로 끌어다 놓기':'비어 있어요 · ＋ 로 추가'}</div>` : !o.list.length&&!ed ? '' : rz('bk:'+b.id, `<div class="blist">${o.list.map(x=>ckRow(x,dr)).join('') || '<div class="empty-b">⠿ 를 잡고 여기로 끌어다 놓기</div>'}</div>`, '', ed)}</div>`; };
   const lb = L.buckets.find(b=>b.id==='late');
   const lateHtml = lb ? `<div class="bucket late ${!late.length&&!ed?'empty':''}" data-bid="late" style="--bk:${bucketColor('late')}">
       <div class="bh">${esc(lb.name)} <span class="count">${late.length}</span><span class="sp"></span>${edb('late', true)}</div>
